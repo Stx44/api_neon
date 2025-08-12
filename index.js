@@ -29,11 +29,11 @@ app.get("/usuarios", async (req, res) => {
 
 // Adicionar usuário
 app.post("/usuarios", async (req, res) => {
-  const { nome, email } = req.body;
+  const { nome, email, senha } = req.body;
   try {
     const result = await pool.query(
-      "INSERT INTO usuarios (nome, email) VALUES ($1, $2) RETURNING *",
-      [nome, email]
+      "INSERT INTO usuarios (nome, email, senha) VALUES ($1, $2, $3) RETURNING *",
+      [nome, email, senha]
     );
     res.json(result.rows[0]);
   } catch (err) {
@@ -41,6 +41,45 @@ app.post("/usuarios", async (req, res) => {
     res.status(500).json({ error: "Erro ao inserir usuário" });
   }
 });
+
+// Login de usuário (sem bcrypt)
+app.post("/login", async (req, res) => {
+  const { email, senha } = req.body;
+
+  try {
+    const result = await pool.query(
+      "SELECT * FROM usuarios WHERE email = $1 AND senha = $2",
+      [email, senha]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: "E-mail ou senha inválidos" });
+    }
+
+    const usuario = result.rows[0];
+    res.json({
+      message: "Login realizado com sucesso!",
+      usuario: {
+        id: usuario.id,
+        nome: usuario.nome,
+        email: usuario.email
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erro no login" });
+  }
+});
+
+// Keep-alive para evitar que o NeonDB durma
+setInterval(async () => {
+  try {
+    await pool.query("SELECT 1");
+    console.log("Ping no banco para evitar inatividade");
+  } catch (err) {
+    console.error("Erro no keep-alive:", err);
+  }
+}, 4 * 60 * 1000); // a cada 4 minutos
 
 const PORT = 3000;
 app.listen(PORT, () => {
