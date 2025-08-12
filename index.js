@@ -22,7 +22,7 @@ app.get("/usuarios", async (req, res) => {
     const result = await pool.query("SELECT * FROM usuarios");
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
+    console.error("Erro ao buscar usuários:", err);
     res.status(500).json({ error: "Erro ao buscar usuários" });
   }
 });
@@ -40,17 +40,20 @@ app.post("/usuarios", async (req, res) => {
       "INSERT INTO usuarios (nome, email, senha) VALUES ($1, $2, $3) RETURNING *",
       [nome, email, senha]
     );
-    res.json(result.rows[0]);
+    res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error(err);
+    console.error("Erro ao inserir usuário:", err);
     res.status(500).json({ error: "Erro ao inserir usuário" });
   }
 });
 
-
 // Login de usuário (sem bcrypt)
 app.post("/login", async (req, res) => {
   const { email, senha } = req.body;
+
+  if (!email || !senha) {
+    return res.status(400).json({ error: "Email e senha são obrigatórios." });
+  }
 
   try {
     const result = await pool.query(
@@ -72,7 +75,7 @@ app.post("/login", async (req, res) => {
       }
     });
   } catch (err) {
-    console.error(err);
+    console.error("Erro no login:", err);
     res.status(500).json({ error: "Erro no login" });
   }
 });
@@ -87,7 +90,7 @@ setInterval(async () => {
   }
 }, 4 * 60 * 1000); // a cada 4 minutos
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });
