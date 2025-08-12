@@ -30,6 +30,11 @@ app.get("/usuarios", async (req, res) => {
 // Adicionar usuário
 app.post("/usuarios", async (req, res) => {
   const { nome, email, senha } = req.body;
+
+  if (!nome || !email || !senha) {
+    return res.status(400).json({ error: "Nome, email e senha são obrigatórios." });
+  }
+
   try {
     const result = await pool.query(
       "INSERT INTO usuarios (nome, email, senha) VALUES ($1, $2, $3) RETURNING *",
@@ -41,6 +46,7 @@ app.post("/usuarios", async (req, res) => {
     res.status(500).json({ error: "Erro ao inserir usuário" });
   }
 });
+
 
 // Login de usuário (sem bcrypt)
 app.post("/login", async (req, res) => {
