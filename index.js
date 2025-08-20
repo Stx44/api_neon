@@ -1,96 +1,125 @@
-const express = require("express");
-const { Pool } = require("pg");
-require("dotenv").config();
+import express from 'express';
+import cors from 'cors';
+import pkg from 'pg';
+const { Pool } = pkg;
 
 const app = express();
+app.use(cors());
 app.use(express.json());
 
-// Conexão com o banco Neon
 const pool = new Pool({
-  connectionString: "postgresql://neondb_owner:npg_DxFV26ahLUAH@ep-red-term-aczhrzl6-pooler.sa-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require",
+  connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
 
-// Rota inicial
-app.get("/", (req, res) => {
-  res.send("API conectada ao banco Neon 🚀");
-});
-
-// Listar usuários
-app.get("/usuarios", async (req, res) => {
-  try {
-    const result = await pool.query("SELECT * FROM usuarios");
-    res.json(result.rows);
-  } catch (err) {
-    console.error("Erro ao buscar usuários:", err);
-    res.status(500).json({ error: "Erro ao buscar usuários" });
-  }
-});
-
-// Adicionar usuário
-app.post("/usuarios", async (req, res) => {
+// 🧑 Usuários
+app.post('/usuarios', async (req, res) => {
   const { nome, email, senha } = req.body;
-
-  if (!nome || !email || !senha) {
-    return res.status(400).json({ error: "Nome, email e senha são obrigatórios." });
-  }
-
   try {
     const result = await pool.query(
-      "INSERT INTO usuarios (nome, email, senha) VALUES ($1, $2, $3) RETURNING *",
+      'INSERT INTO usuarios (nome, email, senha) VALUES ($1, $2, $3) RETURNING *',
       [nome, email, senha]
     );
-    res.status(201).json(result.rows[0]);
+    res.json(result.rows[0]);
   } catch (err) {
-    console.error("Erro ao inserir usuário:", err);
-    res.status(500).json({ error: "Erro ao inserir usuário" });
+    res.status(500).json({ erro: err.message });
   }
 });
 
-// Login de usuário (sem bcrypt)
-app.post("/login", async (req, res) => {
+// 🔐 Login
+app.post('/login', async (req, res) => {
   const { email, senha } = req.body;
-
-  if (!email || !senha) {
-    return res.status(400).json({ error: "Email e senha são obrigatórios." });
-  }
-
   try {
     const result = await pool.query(
-      "SELECT * FROM usuarios WHERE email = $1 AND senha = $2",
+      'SELECT * FROM usuarios WHERE email = $1 AND senha = $2',
       [email, senha]
     );
-
-    if (result.rows.length === 0) {
-      return res.status(401).json({ error: "E-mail ou senha inválidos" });
+    if (result.rows.length > 0) {
+      res.json({ sucesso: true, usuario: result.rows[0] });
+    } else {
+      res.status(401).json({ sucesso: false, mensagem: 'Credenciais inválidas' });
     }
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
 
-    const usuario = result.rows[0];
+// 🍽️ Alimentação
+app.post('/alimentacao', async (req, res) => {
+  const { usuario_id, tipo, calorias, data } = req.body;
+  try {
+    const result = await pool.query(
+      'INSERT INTO alimentacao (usuario_id, tipo, calorias, data) VALUES ($1, $2, $3, $4) RETURNING *',
+      [usuario_id, tipo, calorias, data]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.get('/alimentacao/:usuario_id', async (req, res) => {
+  const { usuario_id } = req.params;
+  try {
+    const result = await pool.query(
+      'SELECT * FROM alimentacao WHERE usuario_id = $1',
+      [usuario_id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// 🏋️ Exercícios
+app.post('/exercicios', async (req, res) => {
+  const { usuario_id, tipo, duracao, calorias, data } = req.body;
+  try {
+    const result = await pool.query(
+      'INSERT INTO exercicios (usuario_id, tipo, duracao, calorias, data) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [usuario_id, tipo, duracao, calorias, data]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+app.get('/exercicios/:usuario_id', async (req, res) => {
+  const { usuario_id } = req.params;
+  try {
+    const result = await pool.query(
+      'SELECT * FROM exercicios WHERE usuario_id = $1',
+      [usuario_id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// 📊 Progresso
+app.get('/progresso/:usuario_id/:data', async (req, res) => {
+  const { usuario_id, data } = req.params;
+  try {
+    const alimentacao = await pool.query(
+      'SELECT SUM(calorias) AS total_calorias FROM alimentacao WHERE usuario_id = $1 AND data = $2',
+      [usuario_id, data]
+    );
+    const exercicios = await pool.query(
+      'SELECT SUM(calorias) AS total_gasto FROM exercicios WHERE usuario_id = $1 AND data = $2',
+      [usuario_id, data]
+    );
     res.json({
-      message: "Login realizado com sucesso!",
-      usuario: {
-        id: usuario.id,
-        nome: usuario.nome,
-        email: usuario.email
-      }
+      data,
+      calorias_consumidas: alimentacao.rows[0].total_calorias || 0,
+      calorias_gastas: exercicios.rows[0].total_gasto || 0,
+      saldo: (alimentacao.rows[0].total_calorias || 0) - (exercicios.rows[0].total_gasto || 0)
     });
   } catch (err) {
-    console.error("Erro no login:", err);
-    res.status(500).json({ error: "Erro no login" });
+    res.status(500).json({ erro: err.message });
   }
 });
-
-// Keep-alive para evitar que o NeonDB durma
-setInterval(async () => {
-  try {
-    await pool.query("SELECT 1");
-    console.log("Ping no banco para evitar inatividade");
-  } catch (err) {
-    console.error("Erro no keep-alive:", err);
-  }
-}, 4 * 60 * 1000); // a cada 4 minutos
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Servidor rodando na porta ${PORT}`);
-});
+app.listen(PORT, () => console.log(`API rodando na porta ${PORT}`));
