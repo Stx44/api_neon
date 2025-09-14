@@ -132,40 +132,48 @@ app.put('/exercicios/:id', async (req, res) => {
 
 
 // 📊 Dashboards
-// Retorna os dados para o dashboard de alimentação (contagem de concluídos por data)
-app.get('/dashboard/alimentacao/:usuario_id', async (req, res) => {
-  const { usuario_id } = req.params;
-  try {
-    const result = await pool.query(
-      `SELECT COUNT(id) AS total_concluido, data_agendada
-       FROM alimentacao
-       WHERE usuario_id = $1 AND concluido = TRUE
-       GROUP BY data_agendada
-       ORDER BY data_agendada ASC`,
-      [usuario_id]
-    );
-    res.json(result.rows);
-  } catch (err) {
-    res.status(500).json({ erro: err.message });
-  }
+// Retorna os dados para o dashboard de peso/IMC
+app.get('/dashboard/peso', async (req, res) => {
+    const { usuario_id } = req.query; // ✅ Acessa o ID da query string
+  
+    if (!usuario_id) {
+        return res.status(400).json({ sucesso: false, erro: "ID do usuário não fornecido." });
+    }
+  
+    try {
+        const result = await pool.query(
+            'SELECT data_registro, peso FROM pesagem WHERE usuario_id = $1 ORDER BY data_registro ASC;',
+            [usuario_id]
+        );
+        res.json(result.rows);
+    } catch (error) {
+        console.error("Erro na rota /dashboard/peso:", error);
+        res.status(500).json({ sucesso: false, erro: "Erro interno do servidor." });
+    }
 });
 
 // Retorna os dados para o dashboard de exercícios (contagem de concluídos por data)
-app.get('/dashboard/exercicios/:usuario_id', async (req, res) => {
-  const { usuario_id } = req.params;
-  try {
-    const result = await pool.query(
-      `SELECT COUNT(id) AS total_concluido, data_agendada
-       FROM exercicios
-       WHERE usuario_id = $1 AND concluido = TRUE
-       GROUP BY data_agendada
-       ORDER BY data_agendada ASC`,
-      [usuario_id]
-    );
-    res.json(result.rows);
-  } catch (err) {
-    res.status(500).json({ erro: err.message });
-  }
+app.get('/dashboard/exercicios', async (req, res) => {
+    const { usuario_id } = req.query; // ✅ Acessa o ID da query string
+  
+    if (!usuario_id) {
+        return res.status(400).json({ sucesso: false, erro: "ID do usuário não fornecido." });
+    }
+  
+    try {
+        const result = await pool.query(
+            `SELECT COUNT(id) AS total_concluido, data_agendada
+             FROM exercicios
+             WHERE usuario_id = $1 AND concluido = TRUE
+             GROUP BY data_agendada
+             ORDER BY data_agendada ASC`,
+            [usuario_id]
+        );
+        res.json(result.rows);
+    } catch (err) {
+      console.error("Erro na rota /dashboard/exercicios:", err);
+      res.status(500).json({ erro: err.message });
+    }
 });
 
 const PORT = process.env.PORT || 3000;
