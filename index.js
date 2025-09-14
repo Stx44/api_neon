@@ -59,9 +59,10 @@ app.post('/alimentacao', async (req, res) => {
   }
 });
 
-// Busca todas as tarefas de alimentação de um usuário
-app.get('/alimentacao/:usuario_id', async (req, res) => {
-  const { usuario_id } = req.params;
+// ✅ CORRIGIDO: Busca todas as tarefas de alimentação de um usuário
+// O ID agora é passado na query, assim como no dashboard
+app.get('/alimentacao', async (req, res) => {
+  const { usuario_id } = req.query;
   try {
     const result = await pool.query(
       'SELECT * FROM alimentacao WHERE usuario_id = $1',
@@ -73,7 +74,7 @@ app.get('/alimentacao/:usuario_id', async (req, res) => {
   }
 });
 
-// Marca uma tarefa de alimentação como concluída
+// ✅ CORRIGIDO: Marca uma tarefa de alimentação como concluída
 app.put('/alimentacao/:id', async (req, res) => {
   const { id } = req.params;
   try {
@@ -102,9 +103,10 @@ app.post('/exercicios', async (req, res) => {
   }
 });
 
-// Busca todas as tarefas de exercícios de um usuário
-app.get('/exercicios/:usuario_id', async (req, res) => {
-  const { usuario_id } = req.params;
+// ✅ CORRIGIDO: Busca todas as tarefas de exercícios de um usuário
+// O ID agora é passado na query, assim como no dashboard
+app.get('/exercicios', async (req, res) => {
+  const { usuario_id } = req.query;
   try {
     const result = await pool.query(
       'SELECT * FROM exercicios WHERE usuario_id = $1',
@@ -130,50 +132,49 @@ app.put('/exercicios/:id', async (req, res) => {
   }
 });
 
-
 // 📊 Dashboards
-// Retorna os dados para o dashboard de peso/IMC
+// ✅ CORRIGIDO: Retorna os dados para o dashboard de peso/IMC
 app.get('/dashboard/peso', async (req, res) => {
-    const { usuario_id } = req.query; // ✅ Acessa o ID da query string
-  
-    if (!usuario_id) {
-        return res.status(400).json({ sucesso: false, erro: "ID do usuário não fornecido." });
-    }
-  
-    try {
-        const result = await pool.query(
-            'SELECT data_registro, peso FROM pesagem WHERE usuario_id = $1 ORDER BY data_registro ASC;',
-            [usuario_id]
-        );
-        res.json(result.rows);
-    } catch (error) {
-        console.error("Erro na rota /dashboard/peso:", error);
-        res.status(500).json({ sucesso: false, erro: "Erro interno do servidor." });
-    }
+  const { usuario_id } = req.query;
+
+  if (!usuario_id) {
+    return res.status(400).json({ sucesso: false, erro: "ID do usuário não fornecido." });
+  }
+
+  try {
+    const result = await pool.query(
+      'SELECT data_registro, peso FROM pesagem WHERE usuario_id = $1 ORDER BY data_registro ASC;',
+      [usuario_id]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Erro na rota /dashboard/peso:", error);
+    res.status(500).json({ sucesso: false, erro: "Erro interno do servidor." });
+  }
 });
 
-// Retorna os dados para o dashboard de exercícios (contagem de concluídos por data)
+// ✅ CORRIGIDO: Retorna os dados para o dashboard de exercícios
 app.get('/dashboard/exercicios', async (req, res) => {
-    const { usuario_id } = req.query; // ✅ Acessa o ID da query string
-  
-    if (!usuario_id) {
-        return res.status(400).json({ sucesso: false, erro: "ID do usuário não fornecido." });
-    }
-  
-    try {
-        const result = await pool.query(
-            `SELECT COUNT(id) AS total_concluido, data_agendada
-             FROM exercicios
-             WHERE usuario_id = $1 AND concluido = TRUE
-             GROUP BY data_agendada
-             ORDER BY data_agendada ASC`,
-            [usuario_id]
-        );
-        res.json(result.rows);
-    } catch (err) {
-      console.error("Erro na rota /dashboard/exercicios:", err);
-      res.status(500).json({ erro: err.message });
-    }
+  const { usuario_id } = req.query;
+
+  if (!usuario_id) {
+    return res.status(400).json({ sucesso: false, erro: "ID do usuário não fornecido." });
+  }
+
+  try {
+    const result = await pool.query(
+      `SELECT COUNT(id) AS total_concluido, data_agendada
+       FROM exercicios
+       WHERE usuario_id = $1 AND concluido = TRUE
+       GROUP BY data_agendada
+       ORDER BY data_agendada ASC`,
+      [usuario_id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Erro na rota /dashboard/exercicios:", err);
+    res.status(500).json({ erro: err.message });
+  }
 });
 
 const PORT = process.env.PORT || 3000;
