@@ -263,7 +263,7 @@ app.get('/dashboard/metas/:usuario_id', async (req, res) => {
         COUNT(id) AS total_metas,
         date_trunc('week', data_agendada) AS data_semana
       FROM
-        exercicios
+        metas
       WHERE
         usuario_id = $1
       GROUP BY
