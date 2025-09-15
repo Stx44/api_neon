@@ -142,7 +142,6 @@ app.post('/dashboard/exercicio/concluido', async (req, res) => {
   }
 });
 
-
 // ✅ Rota para salvar um registro de peso
 app.post('/dashboard/peso', async (req, res) => {
   const { usuario_id, peso, data_registro } = req.body;
@@ -254,32 +253,40 @@ app.get('/dashboard/ranking', async (req, res) => {
   }
 });
 
-// ✅ Rota para as Metas
+// ✅ Rota para as Metas (CORRIGIDA)
 app.get('/dashboard/metas/:usuario_id', async (req, res) => {
   const { usuario_id } = req.params;
   try {
     const result = await pool.query(
-      `SELECT COUNT(id) AS metas_concluidas FROM exercicios WHERE usuario_id = $1 AND concluido = TRUE;`,
+      `SELECT
+        COUNT(CASE WHEN concluido = TRUE THEN 1 END) AS metas_concluidas,
+        COUNT(id) AS total_metas,
+        date_trunc('week', data_agendada) AS data_semana
+      FROM
+        exercicios
+      WHERE
+        usuario_id = $1
+      GROUP BY
+        data_semana
+      ORDER BY
+        data_semana ASC;`,
       [usuario_id]
     );
-    res.json({ sucesso: true, metas: result.rows[0] });
+    res.json({ sucesso: true, metas: result.rows });
   } catch (error) {
     console.error("Erro na rota /dashboard/metas:", error);
     res.status(500).json({ sucesso: false, erro: "Erro interno do servidor." });
   }
 });
 
-// ✅ NOVO: Rota para a Evolução do Peso (Adicione esta rota)
+// ✅ Rota para a Evolução do Peso (Corrigida)
 app.get('/dashboard/evolucao-peso/:usuario_id', async (req, res) => {
   const { usuario_id } = req.params;
   try {
-    // Busca os registros de peso ordenados por data
     const result = await pool.query(
       `SELECT peso, data_registro FROM pesagem WHERE usuario_id = $1 ORDER BY data_registro ASC;`,
       [usuario_id]
     );
-
-    // Retorna os dados para o gráfico de evolução
     res.json({ sucesso: true, evolucao_peso: result.rows });
     
   } catch (error) {
