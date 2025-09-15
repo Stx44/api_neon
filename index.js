@@ -161,6 +161,27 @@ app.post('/dashboard/peso', async (req, res) => {
   }
 });
 
+// ✅ Rota para salvar uma meta
+app.post('/metas', async (req, res) => {
+  const { usuario_id, descricao, data_agendada } = req.body;
+  
+  if (!usuario_id || !descricao || !data_agendada) {
+    return res.status(400).json({ sucesso: false, erro: "Dados incompletos para salvar a meta." });
+  }
+
+  try {
+    const result = await pool.query(
+      `INSERT INTO metas (usuario_id, descricao, data_agendada, concluido) VALUES ($1, $2, $3, FALSE) RETURNING *;`,
+      [usuario_id, descricao, data_agendada]
+    );
+    
+    res.status(201).json({ sucesso: true, meta: result.rows[0] });
+  } catch (error) {
+    console.error("Erro ao salvar meta:", error);
+    res.status(500).json({ sucesso: false, erro: "Erro interno do servidor." });
+  }
+});
+
 
 // 📊 Dashboards
 app.get('/dashboard/peso', async (req, res) => {
