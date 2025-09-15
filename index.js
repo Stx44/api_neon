@@ -181,6 +181,24 @@ app.post('/metas', async (req, res) => {
   }
 });
 
+// ✅ NOVO: Rota para marcar meta como concluída
+app.put('/metas/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await pool.query(
+            `UPDATE metas SET concluido = TRUE WHERE id = $1 RETURNING *`,
+            [id]
+        );
+        if (result.rowCount === 0) {
+            return res.status(404).json({ sucesso: false, erro: "Meta não encontrada." });
+        }
+        res.json({ sucesso: true, meta: result.rows[0] });
+    } catch (error) {
+        console.error("Erro ao marcar meta como concluída:", error);
+        res.status(500).json({ sucesso: false, erro: "Erro interno do servidor." });
+    }
+});
+
 
 // 📊 Dashboards
 app.get('/dashboard/peso', async (req, res) => {
