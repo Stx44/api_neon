@@ -199,6 +199,21 @@ app.put('/metas/:id', async (req, res) => {
     }
 });
 
+// ✅ NOVA ROTA: Obter a lista completa de metas de um usuário
+app.get('/metas/:usuario_id', async (req, res) => {
+  const { usuario_id } = req.params;
+  try {
+    const result = await pool.query(
+      `SELECT * FROM metas WHERE usuario_id = $1 ORDER BY data_agendada ASC;`,
+      [usuario_id]
+    );
+    res.json({ sucesso: true, metas: result.rows });
+  } catch (error) {
+    console.error("Erro na rota /metas/:usuario_id:", error);
+    res.status(500).json({ sucesso: false, erro: "Erro interno do servidor." });
+  }
+});
+
 
 // 📊 Dashboards
 app.get('/dashboard/peso', async (req, res) => {
