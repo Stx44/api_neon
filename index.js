@@ -286,23 +286,12 @@ app.get('/dashboard/ranking', async (req, res) => {
   }
 });
 
-// ✅ Rota para as Metas (CORRIGIDA)
+// ✅ Rota para as Metas (Corrigida para retornar a lista completa)
 app.get('/dashboard/metas/:usuario_id', async (req, res) => {
   const { usuario_id } = req.params;
   try {
     const result = await pool.query(
-      `SELECT
-        COUNT(CASE WHEN concluido = TRUE THEN 1 END) AS metas_concluidas,
-        COUNT(id) AS total_metas,
-        date_trunc('week', data_agendada) AS data_semana
-      FROM
-        metas
-      WHERE
-        usuario_id = $1
-      GROUP BY
-        data_semana
-      ORDER BY
-        data_semana ASC;`,
+      `SELECT id, descricao, data_agendada, concluido FROM metas WHERE usuario_id = $1 ORDER BY data_agendada ASC;`,
       [usuario_id]
     );
     res.json({ sucesso: true, metas: result.rows });
