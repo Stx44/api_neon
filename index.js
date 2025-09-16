@@ -12,19 +12,14 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// 🧑 Rotas de Usuários
+// 🧑 Rotas de Usuários (COM CORREÇÃO DE LOGIN)
 app.post('/usuarios', async (req, res) => {
   const { nome, email, senha } = req.body;
-
-  // --- ALTERAÇÃO APLICADA AQUI ---
-  // Limpa e padroniza os dados ANTES de salvar no banco
   const emailLimpo = email.toLowerCase().trim();
   const senhaLimpa = senha.trim();
-
   try {
     const result = await pool.query(
       'INSERT INTO usuarios (nome, email, senha) VALUES ($1, $2, $3) RETURNING *',
-      // Usa as variáveis limpas para garantir consistência
       [nome, emailLimpo, senhaLimpa]
     );
     res.json(result.rows[0]);
@@ -35,21 +30,16 @@ app.post('/usuarios', async (req, res) => {
 
 app.post('/login', async (req, res) => {
   const { email, senha } = req.body;
-
-  // --- ALTERAÇÃO APLICADA AQUI ---
-  // Limpa e padroniza os dados ANTES de consultar no banco
   const emailLimpo = email.toLowerCase().trim();
   const senhaLimpa = senha.trim();
-
   try {
     const result = await pool.query(
       'SELECT * FROM usuarios WHERE email = $1 AND senha = $2',
-      // Usa as variáveis limpas para garantir que a busca seja igual ao que foi salvo
       [emailLimpo, senhaLimpa]
     );
     if (result.rows.length > 0) {
       const usuario = result.rows[0];
-      delete usuario.senha; // Ação de segurança mantida
+      delete usuario.senha;
       res.json({ sucesso: true, usuario: usuario });
     } else {
       res.status(401).json({ sucesso: false, mensagem: 'Credenciais inválidas' });
@@ -175,7 +165,7 @@ app.post('/dashboard/peso', async (req, res) => {
   }
 });
 
-// ✅ Rota para salvar uma meta (ajustada para salvar a data do início da semana)
+// ✅ Rota para salvar uma meta
 app.post('/metas', async (req, res) => {
   const { usuario_id, descricao, data_agendada } = req.body;
   
@@ -218,7 +208,7 @@ app.put('/metas/:id', async (req, res) => {
     }
 });
 
-// ✅ Rota para obter a lista completa de metas de um usuário (ajustada para retornar os dados brutos)
+// ✅ Rota para obter a lista completa de metas de um usuário
 app.get('/metas/:usuario_id', async (req, res) => {
   const { usuario_id } = req.params;
   try {
@@ -278,7 +268,6 @@ app.get('/dashboard/exercicios', async (req, res) => {
     }
 });
 
-// ✅ Rota para o Ranking
 app.get('/dashboard/ranking', async (req, res) => {
   try {
     const result = await pool.query(`
@@ -306,7 +295,6 @@ app.get('/dashboard/ranking', async (req, res) => {
   }
 });
 
-// ✅ Rota para as Metas (Versão final e segura)
 app.get('/dashboard/metas/:usuario_id', async (req, res) => {
   const { usuario_id } = req.params;
   try {
@@ -322,15 +310,41 @@ app.get('/dashboard/metas/:usuario_id', async (req, res) => {
   }
 });
 
-// ✅ Rota para a Evolução do Peso (Corrigida)
+// ✅ Rota para a Evolução do Peso (COM CORREÇÃO PARA O GRÁFICO)
 app.get('/dashboard/evolucao-peso/:usuario_id', async (req, res) => {
   const { usuario_id } = req.params;
   try {
+    // 1. Buscamos os dados brutos do banco
     const result = await pool.query(
       `SELECT peso, data_registro FROM pesagem WHERE usuario_id = $1 ORDER BY data_registro ASC;`,
       [usuario_id]
     );
-    res.json({ sucesso: true, evolucao_peso: result.rows });
+    
+    const dadosBrutos = result.rows;
+
+    // 2. Se não houver dados, enviamos um formato vazio que o gráfico entende
+    if (dadosBrutos.length === 0) {
+      return res.json({ 
+        sucesso: true, 
+        evolucao_peso: { labels: [], datasets: [{ data: [] }] } 
+      });
+    }
+
+    // 3. Transformamos os dados no formato que o gráfico espera
+    const labelsFormatados = dadosBrutos.map(item => 
+      new Date(item.data_registro).toLocaleDateString('pt-BR', {
+        day: '2-digit', month: '2-digit'
+      })
+    );
+    const dadosDoGrafico = dadosBrutos.map(item => parseFloat(item.peso));
+
+    const dadosParaOGrafico = {
+      labels: labelsFormatados,
+      datasets: [{ data: dadosDoGrafico }]
+    };
+
+    // 4. Enviamos os dados já formatados
+    res.json({ sucesso: true, evolucao_peso: dadosParaOGrafico });
     
   } catch (error) {
     console.error("Erro na rota /dashboard/evolucao-peso:", error);
