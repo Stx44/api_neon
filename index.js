@@ -294,7 +294,14 @@ app.get('/dashboard/metas/:usuario_id', async (req, res) => {
       `SELECT id, descricao, data_agendada, concluido FROM metas WHERE usuario_id = $1 ORDER BY data_agendada ASC;`,
       [usuario_id]
     );
-    res.json({ sucesso: true, metas: result.rows });
+
+    // ✅ Mapeia o resultado e converte 'concluido' para um booleano real
+    const metasTratadas = result.rows.map(meta => ({
+      ...meta,
+      concluido: meta.concluido === true // ou `meta.concluido === 'TRUE'` dependendo da representação
+    }));
+
+    res.json({ sucesso: true, metas: metasTratadas });
   } catch (error) {
     console.error("Erro na rota /dashboard/metas:", error);
     res.status(500).json({ sucesso: false, erro: "Erro interno do servidor." });
