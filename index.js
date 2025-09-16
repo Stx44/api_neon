@@ -15,23 +15,24 @@ const pool = new Pool({
   }
 });
 
-// =================================================================
-// 🧑 ROTAS DE USUÁRIOS (SEM CRIPTOGRAFIA - NÃO RECOMENDADO)
-// =================================================================
-
+// 🧑 ROTAS DE USUÁRIOS
 app.post('/usuarios', async (req, res) => {
   const { nome, email, senha } = req.body;
   if (!nome || !email || !senha) {
     return res.status(400).json({ success: false, error: "Nome, email e senha são obrigatórios." });
   }
+  const emailMinusculo = email.toLowerCase().trim();
   try {
     const result = await pool.query(
-      'INSERT INTO usuarios (nome, email, senha) VALUES ($1, $2, $3) RETURNING id, nome, email, criado_em',
-      [nome, email, senha]
+      'INSERT INTO usuarios (nome, email, senha) VALUES ($1, $2, $3) RETURNING id, nome, email',
+      [nome, emailMinusculo, senha]
     );
     res.status(201).json({ success: true, data: result.rows[0] });
   } catch (error) {
     console.error("Erro ao criar usuário:", error);
+    if (error.code === '23505') {
+      return res.status(409).json({ success: false, error: "Este e-mail já está cadastrado." });
+    }
     res.status(500).json({ success: false, error: "Erro interno do servidor." });
   }
 });
@@ -41,10 +42,11 @@ app.post('/login', async (req, res) => {
   if (!email || !senha) {
     return res.status(400).json({ success: false, error: "Email e senha são obrigatórios." });
   }
+  const emailMinusculo = email.toLowerCase().trim();
   try {
     const result = await pool.query(
       'SELECT * FROM usuarios WHERE email = $1 AND senha = $2',
-      [email, senha]
+      [emailMinusculo, senha]
     );
     if (result.rows.length > 0) {
       const usuario = result.rows[0];
@@ -59,10 +61,7 @@ app.post('/login', async (req, res) => {
   }
 });
 
-// =================================================================
 // 🍽️ ROTAS DE ALIMENTAÇÃO
-// =================================================================
-
 app.post('/alimentacao', async (req, res) => {
   const { usuario_id, descricao, data_agendada } = req.body;
   if (!usuario_id || !descricao || !data_agendada) {
@@ -86,10 +85,7 @@ app.get('/alimentacao/:usuario_id', async (req, res) => {
     return res.status(400).json({ success: false, error: "ID do usuário não fornecido." });
   }
   try {
-    const result = await pool.query(
-      'SELECT * FROM alimentacao WHERE usuario_id = $1',
-      [usuario_id]
-    );
+    const result = await pool.query('SELECT * FROM alimentacao WHERE usuario_id = $1', [usuario_id]);
     res.json({ success: true, data: result.rows });
   } catch (error) {
     console.error("Erro ao buscar alimentação:", error);
@@ -103,10 +99,7 @@ app.put('/alimentacao/:id', async (req, res) => {
     return res.status(400).json({ success: false, error: "ID do registro não fornecido." });
   }
   try {
-    const result = await pool.query(
-      'UPDATE alimentacao SET concluido = TRUE WHERE id = $1 RETURNING *',
-      [id]
-    );
+    const result = await pool.query('UPDATE alimentacao SET concluido = TRUE WHERE id = $1 RETURNING *', [id]);
     if (result.rowCount === 0) {
       return res.status(404).json({ success: false, error: "Registro de alimentação não encontrado." });
     }
@@ -117,10 +110,7 @@ app.put('/alimentacao/:id', async (req, res) => {
   }
 });
 
-// =================================================================
 // 🏋️ ROTAS DE EXERCÍCIOS
-// =================================================================
-
 app.post('/exercicios', async (req, res) => {
   const { usuario_id, descricao, data_agendada } = req.body;
   if (!usuario_id || !descricao || !data_agendada) {
@@ -144,10 +134,7 @@ app.get('/exercicios/:usuario_id', async (req, res) => {
     return res.status(400).json({ success: false, error: "ID do usuário não fornecido." });
   }
   try {
-    const result = await pool.query(
-      'SELECT * FROM exercicios WHERE usuario_id = $1',
-      [usuario_id]
-    );
+    const result = await pool.query('SELECT * FROM exercicios WHERE usuario_id = $1', [usuario_id]);
     res.json({ success: true, data: result.rows });
   } catch (error) {
     console.error("Erro ao buscar exercícios:", error);
@@ -161,10 +148,7 @@ app.put('/exercicios/:id', async (req, res) => {
     return res.status(400).json({ success: false, error: "ID do exercício não fornecido." });
   }
   try {
-    const result = await pool.query(
-      'UPDATE exercicios SET concluido = TRUE WHERE id = $1 RETURNING *',
-      [id]
-    );
+    const result = await pool.query('UPDATE exercicios SET concluido = TRUE WHERE id = $1 RETURNING *', [id]);
     if (result.rowCount === 0) {
       return res.status(404).json({ success: false, error: "Exercício não encontrado." });
     }
@@ -175,11 +159,7 @@ app.put('/exercicios/:id', async (req, res) => {
   }
 });
 
-
-// =================================================================
 // ✅ ROTAS DE METAS E REGISTROS
-// =================================================================
-
 app.post('/metas', async (req, res) => {
   const { usuario_id, descricao, data_agendada } = req.body;
   if (!usuario_id || !descricao || !data_agendada) {
@@ -189,7 +169,6 @@ app.post('/metas', async (req, res) => {
     const dataInicioSemana = new Date(data_agendada);
     dataInicioSemana.setDate(dataInicioSemana.getDate() - dataInicioSemana.getDay());
     dataInicioSemana.setHours(0, 0, 0, 0);
-
     const result = await pool.query(
       `INSERT INTO metas (usuario_id, descricao, data_agendada, concluido) VALUES ($1, $2, $3, FALSE) RETURNING *;`,
       [usuario_id, descricao, dataInicioSemana]
@@ -207,10 +186,7 @@ app.get('/metas/:usuario_id', async (req, res) => {
     return res.status(400).json({ success: false, error: "ID do usuário não fornecido." });
   }
   try {
-    const result = await pool.query(
-      `SELECT * FROM metas WHERE usuario_id = $1 ORDER BY data_agendada ASC;`,
-      [usuario_id]
-    );
+    const result = await pool.query(`SELECT * FROM metas WHERE usuario_id = $1 ORDER BY data_agendada ASC;`, [usuario_id]);
     res.json({ success: true, data: result.rows });
   } catch (error) {
     console.error("Erro na rota /metas/:usuario_id:", error);
@@ -224,10 +200,7 @@ app.put('/metas/:id', async (req, res) => {
     return res.status(400).json({ success: false, error: "ID da meta não fornecido." });
   }
   try {
-    const result = await pool.query(
-      `UPDATE metas SET concluido = TRUE WHERE id = $1 RETURNING *`,
-      [id]
-    );
+    const result = await pool.query(`UPDATE metas SET concluido = TRUE WHERE id = $1 RETURNING *`, [id]);
     if (result.rowCount === 0) {
       return res.status(404).json({ success: false, error: "Meta não encontrada." });
     }
@@ -255,11 +228,7 @@ app.post('/dashboard/peso', async (req, res) => {
   }
 });
 
-
-// =================================================================
 // 📊 ROTAS DE DASHBOARDS (LEITURA)
-// =================================================================
-
 app.get('/dashboard/ranking', async (req, res) => {
   try {
     const query = `
@@ -306,29 +275,26 @@ app.get('/dashboard/evolucao-peso/:usuario_id', async (req, res) => {
 });
 
 app.get('/dashboard/exercicios', async (req, res) => {
-    const { usuario_id } = req.query;
-    if (!usuario_id) {
-        return res.status(400).json({ success: false, error: "ID do usuário não fornecido." });
-    }
-    try {
-        const result = await pool.query(
-            `SELECT COUNT(id) AS total_concluido, data_agendada
-             FROM exercicios
-             WHERE usuario_id = $1 AND concluido = TRUE
-             GROUP BY data_agendada
-             ORDER BY data_agendada ASC`,
-            [usuario_id]
-        );
-        res.json({ success: true, data: result.rows });
-    } catch (error) {
-       console.error("Erro na rota /dashboard/exercicios:", error);
-       res.status(500).json({ success: false, error: "Erro interno do servidor." });
-    }
+  const { usuario_id } = req.query;
+  if (!usuario_id) {
+    return res.status(400).json({ success: false, error: "ID do usuário não fornecido." });
+  }
+  try {
+    const result = await pool.query(
+      `SELECT COUNT(id) AS total_concluido, data_agendada
+       FROM exercicios
+       WHERE usuario_id = $1 AND concluido = TRUE
+       GROUP BY data_agendada
+       ORDER BY data_agendada ASC`,
+      [usuario_id]
+    );
+    res.json({ success: true, data: result.rows });
+  } catch (error) {
+    console.error("Erro na rota /dashboard/exercicios:", error);
+    res.status(500).json({ success: false, error: "Erro interno do servidor." });
+  }
 });
 
-
-// =================================================================
 // INICIALIZAÇÃO DO SERVIDOR
-// =================================================================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`API rodando na porta ${PORT}`));
