@@ -49,6 +49,30 @@ app.post('/login', async (req, res) => {
   }
 });
 
+// ✅ ROTA PARA SALVAR PESO AUTOMATICAMENTE (ADICIONADA)
+app.post('/pesagem', async (req, res) => {
+  const { usuario_id, peso } = req.body;
+
+  if (!usuario_id || !peso) {
+    return res.status(400).json({ sucesso: false, erro: "Dados incompletos." });
+  }
+
+  // Garante que a data seja salva no formato YYYY-MM-DD para o tipo DATE do banco
+  const data_registro = new Date().toISOString().split('T')[0];
+
+  try {
+    const result = await pool.query(
+      `INSERT INTO pesagem (usuario_id, peso, data_registro) VALUES ($1, $2, $3) RETURNING *;`,
+      [usuario_id, peso, data_registro]
+    );
+    res.status(201).json({ sucesso: true, dado: result.rows[0] });
+  } catch (error) {
+    console.error("Erro ao salvar peso:", error);
+    res.status(500).json({ sucesso: false, erro: "Erro interno do servidor." });
+  }
+});
+
+
 // 🍽️ Rotas de Alimentação
 app.post('/alimentacao', async (req, res) => {
   const { usuario_id, descricao, data_agendada } = req.body;
@@ -314,7 +338,6 @@ app.get('/dashboard/metas/:usuario_id', async (req, res) => {
 app.get('/dashboard/evolucao-peso/:usuario_id', async (req, res) => {
   const { usuario_id } = req.params;
   try {
-    // 1. Buscamos os dados brutos do banco
     const result = await pool.query(
       `SELECT peso, data_registro FROM pesagem WHERE usuario_id = $1 ORDER BY data_registro ASC;`,
       [usuario_id]
@@ -322,7 +345,6 @@ app.get('/dashboard/evolucao-peso/:usuario_id', async (req, res) => {
     
     const dadosBrutos = result.rows;
 
-    // 2. Se não houver dados, enviamos um formato vazio que o gráfico entende
     if (dadosBrutos.length === 0) {
       return res.json({ 
         sucesso: true, 
@@ -330,10 +352,9 @@ app.get('/dashboard/evolucao-peso/:usuario_id', async (req, res) => {
       });
     }
 
-    // 3. Transformamos os dados no formato que o gráfico espera
     const labelsFormatados = dadosBrutos.map(item => 
       new Date(item.data_registro).toLocaleDateString('pt-BR', {
-        day: '2-digit', month: '2-digit'
+        day: '2-digit', month: '2-digit', timeZone: 'UTC'
       })
     );
     const dadosDoGrafico = dadosBrutos.map(item => parseFloat(item.peso));
@@ -343,7 +364,6 @@ app.get('/dashboard/evolucao-peso/:usuario_id', async (req, res) => {
       datasets: [{ data: dadosDoGrafico }]
     };
 
-    // 4. Enviamos os dados já formatados
     res.json({ sucesso: true, evolucao_peso: dadosParaOGrafico });
     
   } catch (error) {
