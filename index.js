@@ -168,7 +168,7 @@ app.post('/dashboard/peso', async (req, res) => {
 // ✅ Rota para salvar uma meta
 app.post('/metas', async (req, res) => {
   const { usuario_id, descricao, data_agendada } = req.body;
-  
+
   if (!usuario_id || !descricao || !data_agendada) {
     return res.status(400).json({ sucesso: false, erro: "Dados incompletos para salvar a meta." });
   }
@@ -182,7 +182,7 @@ app.post('/metas', async (req, res) => {
       `INSERT INTO metas (usuario_id, descricao, data_agendada, concluido) VALUES ($1, $2, $3, FALSE) RETURNING *;`,
       [usuario_id, descricao, dataInicioSemana]
     );
-    
+
     res.status(201).json({ sucesso: true, meta: result.rows[0] });
   } catch (error) {
     console.error("Erro ao salvar meta:", error);
@@ -192,20 +192,20 @@ app.post('/metas', async (req, res) => {
 
 // ✅ Rota para marcar meta como concluída
 app.put('/metas/:id', async (req, res) => {
-    const { id } = req.params;
-    try {
-        const result = await pool.query(
-            `UPDATE metas SET concluido = TRUE WHERE id = $1 RETURNING *`,
-            [id]
-        );
-        if (result.rowCount === 0) {
-            return res.status(404).json({ sucesso: false, erro: "Meta não encontrada." });
-        }
-        res.json({ sucesso: true, meta: result.rows[0] });
-    } catch (error) {
-        console.error("Erro ao marcar meta como concluída:", error);
-        res.status(500).json({ sucesso: false, erro: "Erro interno do servidor." });
+  const { id } = req.params;
+  try {
+    const result = await pool.query(
+      `UPDATE metas SET concluido = TRUE WHERE id = $1 RETURNING *`,
+      [id]
+    );
+    if (result.rowCount === 0) {
+      return res.status(404).json({ sucesso: false, erro: "Meta não encontrada." });
     }
+    res.json({ sucesso: true, meta: result.rows[0] });
+  } catch (error) {
+    console.error("Erro ao marcar meta como concluída:", error);
+    res.status(500).json({ sucesso: false, erro: "Erro interno do servidor." });
+  }
 });
 
 // ✅ Rota para obter a lista completa de metas de um usuário
@@ -216,7 +216,7 @@ app.get('/metas/:usuario_id', async (req, res) => {
       `SELECT * FROM metas WHERE usuario_id = $1 ORDER BY data_agendada ASC;`,
       [usuario_id]
     );
-    
+
     res.json({ sucesso: true, metas: result.rows });
   } catch (error) {
     console.error("Erro na rota /metas/:usuario_id:", error);
@@ -227,45 +227,45 @@ app.get('/metas/:usuario_id', async (req, res) => {
 
 // 📊 Rotas de Dashboards
 app.get('/dashboard/peso', async (req, res) => {
-    const { usuario_id } = req.query;
+  const { usuario_id } = req.query;
 
-    if (!usuario_id) {
-        return res.status(400).json({ sucesso: false, erro: "ID do usuário não fornecido." });
-    }
+  if (!usuario_id) {
+    return res.status(400).json({ sucesso: false, erro: "ID do usuário não fornecido." });
+  }
 
-    try {
-        const result = await pool.query(
-            'SELECT data_registro, peso FROM pesagem WHERE usuario_id = $1 ORDER BY data_registro ASC;',
-            [usuario_id]
-        );
-        res.json(result.rows);
-    } catch (error) {
-        console.error("Erro na rota /dashboard/peso:", error);
-        res.status(500).json({ sucesso: false, erro: "Erro interno do servidor." });
-    }
+  try {
+    const result = await pool.query(
+      'SELECT data_registro, peso FROM pesagem WHERE usuario_id = $1 ORDER BY data_registro ASC;',
+      [usuario_id]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Erro na rota /dashboard/peso:", error);
+    res.status(500).json({ sucesso: false, erro: "Erro interno do servidor." });
+  }
 });
 
 app.get('/dashboard/exercicios', async (req, res) => {
-    const { usuario_id } = req.query;
+  const { usuario_id } = req.query;
 
-    if (!usuario_id) {
-        return res.status(400).json({ sucesso: false, erro: "ID do usuário não fornecido." });
-    }
+  if (!usuario_id) {
+    return res.status(400).json({ sucesso: false, erro: "ID do usuário não fornecido." });
+  }
 
-    try {
-        const result = await pool.query(
-            `SELECT COUNT(id) AS total_concluido, data_agendada
-              FROM exercicios
-              WHERE usuario_id = $1 AND concluido = TRUE
-              GROUP BY data_agendada
-              ORDER BY data_agendada ASC`,
-            [usuario_id]
-        );
-        res.json(result.rows);
-    } catch (err) {
-      console.error("Erro na rota /dashboard/exercicios:", err);
-      res.status(500).json({ erro: err.message });
-    }
+  try {
+    const result = await pool.query(
+      `SELECT COUNT(id) AS total_concluido, data_agendada
+         FROM exercicios
+         WHERE usuario_id = $1 AND concluido = TRUE
+         GROUP BY data_agendada
+         ORDER BY data_agendada ASC`,
+      [usuario_id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Erro na rota /dashboard/exercicios:", err);
+    res.status(500).json({ erro: err.message });
+  }
 });
 
 app.get('/dashboard/ranking', async (req, res) => {
