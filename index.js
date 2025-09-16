@@ -12,7 +12,7 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// 🧑 Usuários
+// 🧑 Rotas de Usuários
 app.post('/usuarios', async (req, res) => {
   const { nome, email, senha } = req.body;
   try {
@@ -26,7 +26,6 @@ app.post('/usuarios', async (req, res) => {
   }
 });
 
-// 🔐 Login
 app.post('/login', async (req, res) => {
   const { email, senha } = req.body;
   try {
@@ -44,7 +43,7 @@ app.post('/login', async (req, res) => {
   }
 });
 
-// 🍽️ Alimentação
+// 🍽️ Rotas de Alimentação
 app.post('/alimentacao', async (req, res) => {
   const { usuario_id, descricao, data_agendada } = req.body;
   try {
@@ -84,7 +83,7 @@ app.put('/alimentacao/:id', async (req, res) => {
   }
 });
 
-// 🏋️ Exercícios
+// 🏋️ Rotas de Exercícios
 app.post('/exercicios', async (req, res) => {
   const { usuario_id, descricao, data_agendada } = req.body;
   try {
@@ -160,33 +159,33 @@ app.post('/dashboard/peso', async (req, res) => {
   }
 });
 
-// ✅ Rota para salvar uma meta (corrigida)
+// ✅ Rota para salvar uma meta (ajustada para salvar a data do início da semana)
 app.post('/metas', async (req, res) => {
-  const { usuario_id, descricao, data_agendada } = req.body;
-  
-  if (!usuario_id || !descricao || !data_agendada) {
-    return res.status(400).json({ sucesso: false, erro: "Dados incompletos para salvar a meta." });
-  }
+  const { usuario_id, descricao, data_agendada } = req.body;
+  
+  if (!usuario_id || !descricao || !data_agendada) {
+    return res.status(400).json({ sucesso: false, erro: "Dados incompletos para salvar a meta." });
+  }
 
-  try {
-    // 🟢 CORREÇÃO: Ajusta a data para o início da semana
-    const dataInicioSemana = new Date(data_agendada);
-    dataInicioSemana.setDate(dataInicioSemana.getDate() - dataInicioSemana.getDay());
-    dataInicioSemana.setHours(0, 0, 0, 0);
+  try {
+    // 🟢 CORREÇÃO: Ajusta a data para o início da semana antes de salvar
+    const dataInicioSemana = new Date(data_agendada);
+    dataInicioSemana.setDate(dataInicioSemana.getDate() - dataInicioSemana.getDay());
+    dataInicioSemana.setHours(0, 0, 0, 0);
 
-    const result = await pool.query(
-      `INSERT INTO metas (usuario_id, descricao, data_agendada, concluido) VALUES ($1, $2, $3, FALSE) RETURNING *;`,
-      [usuario_id, descricao, dataInicioSemana]
-    );
-    
-    res.status(201).json({ sucesso: true, meta: result.rows[0] });
-  } catch (error) {
-    console.error("Erro ao salvar meta:", error);
-    res.status(500).json({ sucesso: false, erro: "Erro interno do servidor." });
-  }
+    const result = await pool.query(
+      `INSERT INTO metas (usuario_id, descricao, data_agendada, concluido) VALUES ($1, $2, $3, FALSE) RETURNING *;`,
+      [usuario_id, descricao, dataInicioSemana]
+    );
+    
+    res.status(201).json({ sucesso: true, meta: result.rows[0] });
+  } catch (error) {
+    console.error("Erro ao salvar meta:", error);
+    res.status(500).json({ sucesso: false, erro: "Erro interno do servidor." });
+  }
 });
 
-// ✅ NOVO: Rota para marcar meta como concluída
+// ✅ Rota para marcar meta como concluída
 app.put('/metas/:id', async (req, res) => {
     const { id } = req.params;
     try {
@@ -204,7 +203,7 @@ app.put('/metas/:id', async (req, res) => {
     }
 });
 
-// ✅ NOVA ROTA: Obter a lista completa de metas de um usuário
+// ✅ Rota para obter a lista completa de metas de um usuário (ajustada para retornar os dados brutos)
 app.get('/metas/:usuario_id', async (req, res) => {
   const { usuario_id } = req.params;
   try {
@@ -212,6 +211,8 @@ app.get('/metas/:usuario_id', async (req, res) => {
       `SELECT * FROM metas WHERE usuario_id = $1 ORDER BY data_agendada ASC;`,
       [usuario_id]
     );
+    
+    // 🟢 CORREÇÃO: Removida a conversão redundante. O driver já faz isso.
     res.json({ sucesso: true, metas: result.rows });
   } catch (error) {
     console.error("Erro na rota /metas/:usuario_id:", error);
@@ -220,7 +221,7 @@ app.get('/metas/:usuario_id', async (req, res) => {
 });
 
 
-// 📊 Dashboards
+// 📊 Rotas de Dashboards
 app.get('/dashboard/peso', async (req, res) => {
     const { usuario_id } = req.query;
 
@@ -291,7 +292,7 @@ app.get('/dashboard/ranking', async (req, res) => {
   }
 });
 
-// ✅ Rota para as Metas (Corrigida para retornar a lista completa)
+// ✅ Rota para as Metas (Versão final e segura)
 app.get('/dashboard/metas/:usuario_id', async (req, res) => {
   const { usuario_id } = req.params;
   try {
@@ -300,13 +301,7 @@ app.get('/dashboard/metas/:usuario_id', async (req, res) => {
       [usuario_id]
     );
 
-    // ✅ Mapeia o resultado e converte 'concluido' para um booleano real
-    const metasTratadas = result.rows.map(meta => ({
-      ...meta,
-      concluido: meta.concluido === true // ou `meta.concluido === 'TRUE'` dependendo da representação
-    }));
-
-    res.json({ sucesso: true, metas: metasTratadas });
+    res.json({ sucesso: true, metas: result.rows });
   } catch (error) {
     console.error("Erro na rota /dashboard/metas:", error);
     res.status(500).json({ sucesso: false, erro: "Erro interno do servidor." });
