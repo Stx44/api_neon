@@ -16,17 +16,20 @@ const pool = new Pool({
 });
 
 // ----------------------------------------------------------------------
-// 📧 CONFIGURAÇÃO DO EMAIL (CORRIGIDA E COM CREDENCIAIS HARDCODED)
+// 📧 CONFIGURAÇÃO DO EMAIL (TENTATIVA FINAL: PORTA 587 - TLS)
 // ----------------------------------------------------------------------
 const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',  // Servidor SMTP do Gmail
-    port: 465,               // Porta segura para SSL/TLS
-    secure: true,            // true para porta 465
+    port: 587,               // Porta ALTERNATIVA para TLS
+    secure: false,           // 'secure: false' para a porta 587
+    requireTLS: true,        // Força o uso de criptografia TLS
     auth: {
-        user: 'PlusHealthTcc@gmail.com', // ⚠️ SEU EMAIL AQUI
+        user: 'PlusHealthTcc@gmail.com', 
         // ⚠️ SUBSTITUA O '+health123' PELA SUA SENHA DE APLICAÇÃO DE 16 CARACTERES SEM ESPAÇOS
-        pass: 'qkwnjzgkurueaeds' 
-    }
+        pass: '+health123' 
+    },
+    connectionTimeout: 5000, // 5 segundos para estabelecer a conexão
+    socketTimeout: 5000      // 5 segundos para inatividade do socket
 });
 
 // Define o domínio da sua API no Render (usado no link de verificação)
