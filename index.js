@@ -20,11 +20,9 @@ const pool = new Pool({
 // ----------------------------------------------------------------------
 const transporter = nodemailer.createTransport({
     // ⚠️ SUBSTITUA PELO SEU SERVIÇO DE EMAIL REAL
-    service: 'gmail', 
-    auth: {
-        user: 'PlusHealthTcc@gmail.com', // ⚠️ SEU EMAIL AQUI
-        pass: 'fbmrnzjngludlxts' // ⚠️ SUA SENHA DE APLICATIVO AQUI
-    }
+    host: 'smtp.gmail.com',  // Servidor SMTP do Gmail
+    port: 465,               // Porta segura para SSL/TLS
+    secure: true,
 });
 
 // Define o domínio da sua API no Render (usado no link de verificação)
