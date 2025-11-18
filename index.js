@@ -23,7 +23,7 @@ const transporter = nodemailer.createTransport({
     service: 'gmail', 
     auth: {
         user: 'PlusHealthTcc@gmail.com', // ⚠️ SEU EMAIL AQUI
-        pass: '+health123' // ⚠️ SUA SENHA DE APLICATIVO AQUI
+        pass: 'fbmrnzjngludlxts' // ⚠️ SUA SENHA DE APLICATIVO AQUI
     }
 });
 
