@@ -2,10 +2,12 @@ import express from 'express';
 import cors from 'cors';
 import pkg from 'pg';
 const { Pool } = pkg;
+import nodemailer from 'nodemailer'; // 📧 Para envio de e-mails
+import crypto from 'crypto'; // Para gerar tokens
 
 const app = express();
 app.use(cors());
-// Aumentamos o limite para 50mb para aceitar fotos em Base64
+// Limite aumentado para 50mb para aceitar fotos em Base64
 app.use(express.json({ limit: '50mb' })); 
 
 const pool = new Pool({
@@ -13,40 +15,94 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// ==================================================
-// 🧑 GESTÃO DE USUÁRIOS (Auth, Perfil, Senhas)
-// ==================================================
-
-// 1. Criar Conta (Cadastro)
-app.post('/usuarios', async (req, res) => {
-  const { nome, email, senha } = req.body;
-  try {
-    const result = await pool.query(
-      'INSERT INTO usuarios (nome, email, senha) VALUES ($1, $2, $3) RETURNING *',
-      [nome, email, senha]
-    );
-    res.json(result.rows[0]);
-  } catch (err) {
-    res.status(500).json({ erro: err.message });
-  }
+// ----------------------------------------------------------------------
+// 📧 CONFIGURAÇÃO DO EMAIL
+// ----------------------------------------------------------------------
+const transporter = nodemailer.createTransport({
+    // ⚠️ SUBSTITUA PELO SEU SERVIÇO DE EMAIL REAL
+    service: 'gmail', 
+    auth: {
+        user: 'PlusHealthTcc@gmail.com', // ⚠️ SEU EMAIL AQUI
+        pass: '+health123' // ⚠️ SUA SENHA DE APLICATIVO AQUI
+    }
 });
 
-// 2. Login
-app.post('/login', async (req, res) => {
-  const { email, senha } = req.body;
-  try {
-    const result = await pool.query(
-      'SELECT * FROM usuarios WHERE email = $1 AND senha = $2',
-      [email, senha]
-    );
-    if (result.rows.length > 0) {
-      res.json({ sucesso: true, usuario: result.rows[0] });
-    } else {
-      res.status(401).json({ sucesso: false, mensagem: 'Credenciais inválidas' });
+// Define o domínio da sua API no Render (usado no link de verificação)
+const API_URL_DOMAIN = "https://api-neon-2kpd.onrender.com"; 
+
+// ----------------------------------------------------------------------
+// 🧑 GESTÃO DE USUÁRIOS (Auth, Perfil, Senhas, Verificação)
+// ----------------------------------------------------------------------
+
+// 1. Criar Conta (Cadastro) - AGORA REQUER VERIFICAÇÃO DE EMAIL
+app.post('/usuarios', async (req, res) => {
+    const { nome, email, senha } = req.body;
+    const token = crypto.randomBytes(20).toString('hex'); // Gera um token único
+
+    try {
+        const result = await pool.query(
+            'INSERT INTO usuarios (nome, email, senha, email_verificado, verification_token) VALUES ($1, $2, $3, FALSE, $4) RETURNING id, nome, email',
+            [nome, email, senha, token]
+        );
+        
+        const novoUsuario = result.rows[0];
+
+        // --- Envio do Email de Confirmação ---
+        const mailOptions = {
+            to: email,
+            subject: '🥳 Confirme o seu email - Acesso ao seu App!',
+            html: `
+                   <p style="font-size: 16px;">Olá <strong>${nome}</strong>,</p>
+                   <p>Agradecemos por se registar! Por favor, clique no botão abaixo para verificar o seu endereço de email e ativar a sua conta.</p>
+                   <a href="${API_URL_DOMAIN}/verificar-email?token=${token}" 
+                      style="display: inline-block; padding: 10px 20px; background-color: #005067; color: #ffffff; text-decoration: none; border-radius: 5px; font-weight: bold; margin: 15px 0;">
+                       Ativar Minha Conta
+                   </a>
+                   <p style="margin-top: 30px; font-size: 12px; color: #888; border-top: 1px solid #f0f0f0; padding-top: 10px;">
+                       <strong>Cláusula de Segurança:</strong> Se você não se registou em nossa plataforma, por favor, desconsidere este e-mail. Para sua segurança, recomendamos que troque sua senha imediatamente caso tenha alguma dúvida sobre a segurança da sua conta.
+                   </p>
+                  `
+        };
+
+        transporter.sendMail(mailOptions, (error, info) => {
+            if (error) {
+                console.error('Erro ao enviar email:', error);
+            } else {
+                console.log('Email enviado: ' + info.response);
+            }
+        });
+
+        res.json({ sucesso: true, mensagem: "Conta criada. Verifique o seu email para ativar.", usuario: novoUsuario });
+
+    } catch (err) {
+        res.status(500).json({ erro: err.message });
     }
-  } catch (err) {
-    res.status(500).json({ erro: err.message });
-  }
+});
+
+// 2. Login - AGORA SÓ FUNCIONA COM EMAIL VERIFICADO
+app.post('/login', async (req, res) => {
+    const { email, senha } = req.body;
+    try {
+        const result = await pool.query(
+            'SELECT * FROM usuarios WHERE email = $1 AND senha = $2',
+            [email, senha]
+        );
+        
+        const usuario = result.rows[0];
+
+        if (!usuario) {
+            return res.status(401).json({ sucesso: false, mensagem: 'Credenciais inválidas' });
+        }
+        
+        if (usuario.email_verificado === false) {
+             return res.status(401).json({ sucesso: false, mensagem: 'Conta não verificada. Por favor, verifique o seu email.' });
+        }
+        
+        res.json({ sucesso: true, usuario: usuario });
+        
+    } catch (err) {
+        res.status(500).json({ erro: err.message });
+    }
 });
 
 // 3. Atualizar Perfil (Foto, Nome, Email)
@@ -90,7 +146,6 @@ app.put('/usuarios/:id/senha', async (req, res) => {
     const usuario = userResult.rows[0];
 
     if (!usuario) return res.status(404).json({ erro: "Usuário não encontrado." });
-
     if (usuario.senha !== senha_atual) {
       return res.status(401).json({ erro: "Senha atual incorreta." });
     }
@@ -103,11 +158,11 @@ app.put('/usuarios/:id/senha', async (req, res) => {
   }
 });
 
-// ==================================================
-// 🔐 RECUPERAÇÃO DE SENHA (Esqueci a Senha)
-// ==================================================
+// ----------------------------------------------------------------------
+// 🔐 RECUPERAÇÃO DE SENHA (Esqueci a Senha) & VERIFICAÇÃO
+// ----------------------------------------------------------------------
 
-// 5. Verificar se Email existe
+// 5. Verificar se Email existe (Primeira tela do fluxo de recuperação)
 app.post('/verificar-email', async (req, res) => {
   const { email } = req.body;
   try {
@@ -123,7 +178,7 @@ app.post('/verificar-email', async (req, res) => {
   }
 });
 
-// 6. Redefinir Senha (Sem senha antiga)
+// 6. Redefinir Senha (Segunda tela do fluxo de recuperação)
 app.put('/redefinir-senha/:id', async (req, res) => {
   const { id } = req.params;
   const { nova_senha } = req.body;
@@ -148,10 +203,34 @@ app.put('/redefinir-senha/:id', async (req, res) => {
   }
 });
 
-// ==================================================
-// 🍽️ ROTAS DE ALIMENTAÇÃO
-// ==================================================
+// 7. Finalizar Verificação por Token (Acionado pelo link do email)
+app.get('/verificar-email', async (req, res) => {
+    const { token } = req.query;
 
+    if (!token) {
+        return res.status(400).send('Token de verificação não encontrado.');
+    }
+
+    try {
+        const result = await pool.query(
+            'UPDATE usuarios SET email_verificado = TRUE, verification_token = NULL WHERE verification_token = $1 RETURNING id',
+            [token]
+        );
+
+        if (result.rowCount > 0) {
+            return res.send('<h1>✅ Sucesso!</h1><p>O seu e-mail foi verificado com sucesso. Pode fechar esta janela e voltar à aplicação para fazer login.</p>');
+        } else {
+            return res.status(400).send('Link de verificação inválido ou expirado.');
+        }
+
+    } catch (err) {
+        res.status(500).send('Erro interno do servidor durante a verificação.');
+    }
+});
+
+// ----------------------------------------------------------------------
+// 🍽️ ROTAS DE ALIMENTAÇÃO (EXISTENTES)
+// ----------------------------------------------------------------------
 app.post('/alimentacao', async (req, res) => {
   const { usuario_id, descricao, data_agendada } = req.body;
   try {
@@ -191,10 +270,9 @@ app.put('/alimentacao/:id', async (req, res) => {
   }
 });
 
-// ==================================================
-// 🏋️ ROTAS DE EXERCÍCIOS
-// ==================================================
-
+// ----------------------------------------------------------------------
+// 🏋️ ROTAS DE EXERCÍCIOS (EXISTENTES)
+// ----------------------------------------------------------------------
 app.post('/exercicios', async (req, res) => {
   const { usuario_id, descricao, data_agendada } = req.body;
   try {
@@ -251,66 +329,9 @@ app.post('/dashboard/exercicio/concluido', async (req, res) => {
   }
 });
 
-// ==================================================
-// 🎯 ROTAS DE METAS
-// ==================================================
-
-app.post('/metas', async (req, res) => {
-  const { usuario_id, descricao, data_agendada } = req.body;
-
-  if (!usuario_id || !descricao || !data_agendada) {
-    return res.status(400).json({ sucesso: false, erro: "Dados incompletos." });
-  }
-
-  try {
-    // Ajusta data para inicio da semana
-    const dataInicioSemana = new Date(data_agendada);
-    dataInicioSemana.setDate(dataInicioSemana.getDate() - dataInicioSemana.getDay());
-    dataInicioSemana.setHours(0, 0, 0, 0);
-
-    const result = await pool.query(
-      `INSERT INTO metas (usuario_id, descricao, data_agendada, concluido) VALUES ($1, $2, $3, FALSE) RETURNING *;`,
-      [usuario_id, descricao, dataInicioSemana]
-    );
-
-    res.status(201).json({ sucesso: true, meta: result.rows[0] });
-  } catch (error) {
-    res.status(500).json({ sucesso: false, erro: "Erro interno do servidor." });
-  }
-});
-
-app.put('/metas/:id', async (req, res) => {
-  const { id } = req.params;
-  try {
-    const result = await pool.query(
-      `UPDATE metas SET concluido = TRUE WHERE id = $1 RETURNING *`,
-      [id]
-    );
-    if (result.rowCount === 0) {
-      return res.status(404).json({ sucesso: false, erro: "Meta não encontrada." });
-    }
-    res.json({ sucesso: true, meta: result.rows[0] });
-  } catch (error) {
-    res.status(500).json({ sucesso: false, erro: "Erro interno do servidor." });
-  }
-});
-
-app.get('/metas/:usuario_id', async (req, res) => {
-  const { usuario_id } = req.params;
-  try {
-    const result = await pool.query(
-      `SELECT * FROM metas WHERE usuario_id = $1 ORDER BY data_agendada ASC;`,
-      [usuario_id]
-    );
-    res.json({ sucesso: true, metas: result.rows });
-  } catch (error) {
-    res.status(500).json({ sucesso: false, erro: "Erro interno do servidor." });
-  }
-});
-
-// ==================================================
-// 📊 DASHBOARDS & ESTATÍSTICAS
-// ==================================================
+// ----------------------------------------------------------------------
+// 📊 ROTAS DE DASHBOARDS & METAS (EXISTENTES)
+// ----------------------------------------------------------------------
 
 // Salvar Peso
 app.post('/dashboard/peso', async (req, res) => {
@@ -324,22 +345,6 @@ app.post('/dashboard/peso', async (req, res) => {
       [usuario_id, peso, data_registro]
     );
     res.json({ sucesso: true, dado: result.rows[0] });
-  } catch (error) {
-    res.status(500).json({ sucesso: false, erro: "Erro interno do servidor." });
-  }
-});
-
-// Histórico de Peso
-app.get('/dashboard/peso', async (req, res) => {
-  const { usuario_id } = req.query;
-  if (!usuario_id) return res.status(400).json({ sucesso: false, erro: "ID obrigatório." });
-
-  try {
-    const result = await pool.query(
-      'SELECT data_registro, peso FROM pesagem WHERE usuario_id = $1 ORDER BY data_registro ASC;',
-      [usuario_id]
-    );
-    res.json(result.rows);
   } catch (error) {
     res.status(500).json({ sucesso: false, erro: "Erro interno do servidor." });
   }
@@ -359,27 +364,7 @@ app.get('/dashboard/evolucao-peso/:usuario_id', async (req, res) => {
   }
 });
 
-// Estatística de Exercícios
-app.get('/dashboard/exercicios', async (req, res) => {
-  const { usuario_id } = req.query;
-  if (!usuario_id) return res.status(400).json({ sucesso: false, erro: "ID obrigatório." });
-
-  try {
-    const result = await pool.query(
-      `SELECT COUNT(id) AS total_concluido, data_agendada
-       FROM exercicios
-       WHERE usuario_id = $1 AND concluido = TRUE
-       GROUP BY data_agendada
-       ORDER BY data_agendada ASC`,
-      [usuario_id]
-    );
-    res.json(result.rows);
-  } catch (err) {
-    res.status(500).json({ erro: err.message });
-  }
-});
-
-// Metas para Dashboard
+// Metas do Dashboard
 app.get('/dashboard/metas/:usuario_id', async (req, res) => {
   const { usuario_id } = req.params;
   try {
@@ -419,6 +404,61 @@ app.get('/dashboard/ranking', async (req, res) => {
     res.status(500).json({ sucesso: false, erro: "Erro interno do servidor." });
   }
 });
+
+// Salvar Meta
+app.post('/metas', async (req, res) => {
+  const { usuario_id, descricao, data_agendada } = req.body;
+
+  if (!usuario_id || !descricao || !data_agendada) {
+    return res.status(400).json({ sucesso: false, erro: "Dados incompletos." });
+  }
+
+  try {
+    const dataInicioSemana = new Date(data_agendada);
+    dataInicioSemana.setDate(dataInicioSemana.getDate() - dataInicioSemana.getDay());
+    dataInicioSemana.setHours(0, 0, 0, 0);
+
+    const result = await pool.query(
+      `INSERT INTO metas (usuario_id, descricao, data_agendada, concluido) VALUES ($1, $2, $3, FALSE) RETURNING *;`,
+      [usuario_id, descricao, dataInicioSemana]
+    );
+
+    res.status(201).json({ sucesso: true, meta: result.rows[0] });
+  } catch (error) {
+    res.status(500).json({ sucesso: false, erro: "Erro interno do servidor." });
+  }
+});
+
+// Marcar Meta como concluída
+app.put('/metas/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query(
+      `UPDATE metas SET concluido = TRUE WHERE id = $1 RETURNING *`,
+      [id]
+    );
+    if (result.rowCount === 0) {
+      return res.status(404).json({ sucesso: false, erro: "Meta não encontrada." });
+    }
+    res.json({ sucesso: true, meta: result.rows[0] });
+  } catch (error) {
+    res.status(500).json({ sucesso: false, erro: "Erro interno do servidor." });
+  }
+});
+
+app.get('/metas/:usuario_id', async (req, res) => {
+  const { usuario_id } = req.params;
+  try {
+    const result = await pool.query(
+      `SELECT * FROM metas WHERE usuario_id = $1 ORDER BY data_agendada ASC;`,
+      [usuario_id]
+    );
+    res.json({ sucesso: true, metas: result.rows });
+  } catch (error) {
+    res.status(500).json({ sucesso: false, erro: "Erro interno do servidor." });
+  }
+});
+
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`API rodando na porta ${PORT}`));
