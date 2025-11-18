@@ -22,7 +22,7 @@ const pool = new Pool({
 // ----------------------------------------------------------------------
 const transporter = nodemailer.createTransport({
     host: 'smtp.sendgrid.net',
-    port: 587,
+    port: 2525,
     secure: false,
     requireTLS: true,
     auth: {
