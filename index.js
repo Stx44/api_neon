@@ -16,20 +16,20 @@ const pool = new Pool({
 });
 
 // ----------------------------------------------------------------------
-// 📧 CONFIGURAÇÃO DO EMAIL (TENTATIVA FINAL: PORTA 587 - TLS)
+// 📧 CONFIGURAÇÃO DO EMAIL (MIGRADO PARA SENDGRID - SEGURO COM VAR. AMBIENTE)
 // ----------------------------------------------------------------------
 const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',  // Servidor SMTP do Gmail
-    port: 587,               // Porta ALTERNATIVA para TLS
+    host: 'smtp.sendgrid.net',  // Servidor SMTP do SendGrid
+    port: 587,               // Porta padrão do SendGrid para TLS
     secure: false,           // 'secure: false' para a porta 587
     requireTLS: true,        // Força o uso de criptografia TLS
     auth: {
-        user: 'PlusHealthTcc@gmail.com', 
-        // ⚠️ SUBSTITUA O '+health123' PELA SUA SENHA DE APLICAÇÃO DE 16 CARACTERES SEM ESPAÇOS
-        pass: '+health123' 
+        // user é sempre 'apikey' no SendGrid (em minúsculas)
+        user: 'apikey', 
+        pass: process.env.SENDGRID_API_KEY, 
     },
-    connectionTimeout: 5000, // 5 segundos para estabelecer a conexão
-    socketTimeout: 5000      // 5 segundos para inatividade do socket
+    connectionTimeout: 5000, 
+    socketTimeout: 5000      
 });
 
 // Define o domínio da sua API no Render (usado no link de verificação)
@@ -54,6 +54,9 @@ app.post('/usuarios', async (req, res) => {
 
         // --- Envio do Email de Confirmação ---
         const mailOptions = {
+            // FROM NAME e REPLY-TO configurados para a Verificação de Remetente Único do SendGrid
+            from: '"Plus Health" <PlusHealthTcc@gmail.com>', 
+            replyTo: 'PlusHealthTcc@gmail.com',
             to: email,
             subject: '🥳 Confirme o seu email - Acesso ao seu App!',
             html: `
@@ -69,13 +72,14 @@ app.post('/usuarios', async (req, res) => {
                   `
         };
         
-        // 🚨 LOG DE RASTREIO APLICADO
+        // LOG DE RASTREIO APLICADO
         console.log('##### Tentando enviar email para:', email); 
 
         transporter.sendMail(mailOptions, (error, info) => {
             if (error) {
                 console.error('Erro ao enviar email:', error);
             } else {
+                // Log de sucesso
                 console.log('Email enviado: ' + info.response);
             }
         });
@@ -83,7 +87,7 @@ app.post('/usuarios', async (req, res) => {
         res.json({ sucesso: true, mensagem: "Conta criada. Verifique o seu email para ativar.", usuario: novoUsuario });
 
     } catch (err) {
-        // 🚨 Log de erro do DB ou validação
+        // Log de erro do DB ou validação
         console.error('Erro no cadastro/DB:', err.message);
         res.status(500).json({ erro: err.message });
     }
@@ -471,4 +475,4 @@ app.get('/metas/:usuario_id', async (req, res) => {
 
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`API rodando na porta ${PORT}`));
+app.listen(PORT, () => console.log(`API rodando na porta wow1 ${PORT}`));
