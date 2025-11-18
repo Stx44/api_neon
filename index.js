@@ -16,13 +16,17 @@ const pool = new Pool({
 });
 
 // ----------------------------------------------------------------------
-// 📧 CONFIGURAÇÃO DO EMAIL
+// 📧 CONFIGURAÇÃO DO EMAIL (CORRIGIDA E COM CREDENCIAIS HARDCODED)
 // ----------------------------------------------------------------------
 const transporter = nodemailer.createTransport({
-    // ⚠️ SUBSTITUA PELO SEU SERVIÇO DE EMAIL REAL
     host: 'smtp.gmail.com',  // Servidor SMTP do Gmail
     port: 465,               // Porta segura para SSL/TLS
-    secure: true,
+    secure: true,            // true para porta 465
+    auth: {
+        user: 'PlusHealthTcc@gmail.com', // ⚠️ SEU EMAIL AQUI
+        // ⚠️ SUBSTITUA O '+health123' PELA SUA SENHA DE APLICAÇÃO DE 16 CARACTERES SEM ESPAÇOS
+        pass: 'qkwnjzgkurueaeds' 
+    }
 });
 
 // Define o domínio da sua API no Render (usado no link de verificação)
@@ -61,6 +65,9 @@ app.post('/usuarios', async (req, res) => {
                    </p>
                   `
         };
+        
+        // 🚨 LOG DE RASTREIO APLICADO
+        console.log('##### Tentando enviar email para:', email); 
 
         transporter.sendMail(mailOptions, (error, info) => {
             if (error) {
@@ -73,6 +80,8 @@ app.post('/usuarios', async (req, res) => {
         res.json({ sucesso: true, mensagem: "Conta criada. Verifique o seu email para ativar.", usuario: novoUsuario });
 
     } catch (err) {
+        // 🚨 Log de erro do DB ou validação
+        console.error('Erro no cadastro/DB:', err.message);
         res.status(500).json({ erro: err.message });
     }
 });
