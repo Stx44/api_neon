@@ -1,4 +1,4 @@
-import 'dotenv/config'; // Carrega variáveis locais se existirem (não atrapalha no Render)
+import 'dotenv/config'; 
 import express from 'express';
 import cors from 'cors';
 import pkg from 'pg';
@@ -11,14 +11,14 @@ app.use(cors());
 // Limite aumentado para 50mb para aceitar fotos em Base64
 app.use(express.json({ limit: '50mb' })); 
 
-// Conexão com o Banco de Dados (Pega a URL definida no Render ou local)
+// Conexão com o Banco de Dados
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
 
 // ----------------------------------------------------------------------
-// 📧 CONFIGURAÇÃO DO EMAIL (USANDO SUA VARIÁVEL DO RENDER)
+// 📧 CONFIGURAÇÃO DO EMAIL
 // ----------------------------------------------------------------------
 const transporter = nodemailer.createTransport({
     host: 'smtp.sendgrid.net',
@@ -55,7 +55,7 @@ app.post('/usuarios', async (req, res) => {
 
         // --- Envio do Email ---
         const mailOptions = {
-            from: '"Plus Health" <PlusHealthTcc@gmail.com>', // Este email DEVE ser o verificado no SendGrid
+            from: '"Plus Health" <PlusHealthTcc@gmail.com>', 
             replyTo: 'PlusHealthTcc@gmail.com',
             to: email,
             subject: '🥳 Confirme o seu email - Acesso ao seu App!',
@@ -200,7 +200,7 @@ app.put('/redefinir-senha/:id', async (req, res) => {
   }
 });
 
-// 7. Rota do Link de Verificação (Navegador)
+// 7. Rota do Link de Verificação (Navegador - Ativação de Conta)
 app.get('/verificar-email', async (req, res) => {
     const { token } = req.query;
     if (!token) return res.status(400).send('Token inválido.');
@@ -212,7 +212,6 @@ app.get('/verificar-email', async (req, res) => {
         );
 
         if (result.rowCount > 0) {
-            // HTML bonito de confirmação
             res.send(`
                 <div style="text-align: center; font-family: Arial; margin-top: 50px;">
                     <h1 style="color: green;">✅ Email Verificado!</h1>
@@ -345,6 +344,102 @@ app.get('/metas/:usuario_id', async (req, res) => {
   } catch (err) { res.status(500).json({ erro: err.message }); }
 });
 
-// Porta do servidor (Render define process.env.PORT automaticamente)
+// ----------------------------------------------------------------------
+// 🗑️ EXCLUSÃO DE CONTA (NOVAS ROTAS)
+// ----------------------------------------------------------------------
+
+// 8. Solicitar Exclusão de Conta (Envia Email)
+app.post('/usuarios/:id/solicitar-exclusao', async (req, res) => {
+    const { id } = req.params;
+    const { email } = req.body; 
+    
+    const token = crypto.randomBytes(20).toString('hex');
+
+    try {
+        // Define o token de verificação no usuário para validar a exclusão depois
+        const result = await pool.query(
+            'UPDATE usuarios SET verification_token = $1 WHERE id = $2 RETURNING nome',
+            [token, id]
+        );
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ erro: "Usuário não encontrado." });
+        }
+
+        const nome = result.rows[0].nome;
+
+        // Configura o email de exclusão
+        const mailOptions = {
+            from: '"Plus Health" <PlusHealthTcc@gmail.com>',
+            replyTo: 'PlusHealthTcc@gmail.com',
+            to: email,
+            subject: '⚠️ Confirmação de Exclusão de Conta',
+            html: `
+                   <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #ccc; padding: 20px; border-radius: 10px;">
+                     <h2 style="color: #d9534f;">Atenção, ${nome}!</h2>
+                     <p>Recebemos uma solicitação para <strong>EXCLUIR PERMANENTEMENTE</strong> sua conta.</p>
+                     <p>Se foi você quem solicitou, clique no botão abaixo para confirmar a exclusão de todos os seus dados.</p>
+                     <br>
+                     <a href="${API_URL_DOMAIN}/confirmar-exclusao?token=${token}" 
+                        style="background-color: #d9534f; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
+                         Sim, Excluir Minha Conta
+                     </a>
+                     <br><br>
+                     <p style="color: #777; font-size: 12px;">Se não foi você, ignore este email e sua conta permanecerá segura.</p>
+                   </div>
+                  `
+        };
+
+        transporter.sendMail(mailOptions, (error, info) => {
+            if (error) {
+                console.error('Erro ao enviar email de exclusão:', error);
+                return res.status(500).json({ erro: "Erro ao enviar email." });
+            }
+            res.json({ sucesso: true, mensagem: "Email de confirmação enviado." });
+        });
+
+    } catch (err) {
+        res.status(500).json({ erro: err.message });
+    }
+});
+
+// 9. Confirmar Exclusão (Link do Email - Rota Navegador)
+app.get('/confirmar-exclusao', async (req, res) => {
+    const { token } = req.query;
+    if (!token) return res.status(400).send('Token inválido.');
+
+    try {
+        // Busca o usuário pelo token
+        const userCheck = await pool.query('SELECT id FROM usuarios WHERE verification_token = $1', [token]);
+        
+        if (userCheck.rowCount === 0) {
+            return res.status(400).send('<h1 style="color: red;">Link inválido ou já utilizado.</h1>');
+        }
+
+        const usuarioId = userCheck.rows[0].id;
+
+        // Deleta registros relacionados (tabelas filhas)
+        await pool.query('DELETE FROM alimentacao WHERE usuario_id = $1', [usuarioId]);
+        await pool.query('DELETE FROM exercicios WHERE usuario_id = $1', [usuarioId]);
+        await pool.query('DELETE FROM metas WHERE usuario_id = $1', [usuarioId]);
+        await pool.query('DELETE FROM pesagem WHERE usuario_id = $1', [usuarioId]);
+
+        // Deleta o usuário
+        await pool.query('DELETE FROM usuarios WHERE id = $1', [usuarioId]);
+
+        res.send(`
+            <div style="text-align: center; font-family: Arial; margin-top: 50px;">
+                <h1 style="color: #d9534f;">🗑️ Conta Excluída</h1>
+                <p>Sua conta e todos os seus dados foram apagados com sucesso.</p>
+                <p>Sentiremos sua falta!</p>
+            </div>
+        `);
+
+    } catch (err) {
+        console.error("Erro na exclusão:", err);
+        res.status(500).send('Erro interno ao excluir conta.');
+    }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`API rodando na porta ${PORT}`));
