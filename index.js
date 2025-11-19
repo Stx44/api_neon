@@ -201,33 +201,123 @@ app.put('/redefinir-senha/:id', async (req, res) => {
 });
 
 // 7. Rota do Link de Verificação (Navegador - Ativação de Conta)
+// --- TELA ESTILIZADA COM CARINHO ---
 app.get('/verificar-email', async (req, res) => {
     const { token } = req.query;
     if (!token) return res.status(400).send('Token inválido.');
 
     try {
         const result = await pool.query(
-            'UPDATE usuarios SET email_verificado = TRUE, verification_token = NULL WHERE verification_token = $1 RETURNING id',
+            'UPDATE usuarios SET email_verificado = TRUE, verification_token = NULL WHERE verification_token = $1 RETURNING nome',
             [token]
         );
 
         if (result.rowCount > 0) {
+            const nome = result.rows[0].nome;
+
+            // HTML Estilizado de Boas-Vindas
             res.send(`
-                <div style="text-align: center; font-family: Arial; margin-top: 50px;">
-                    <h1 style="color: green;">✅ Email Verificado!</h1>
-                    <p>Sua conta foi ativada com sucesso.</p>
-                    <p>Você já pode fechar esta janela e fazer login no aplicativo.</p>
-                </div>
+                <!DOCTYPE html>
+                <html lang="pt-BR">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>Conta Verificada</title>
+                    <style>
+                        body {
+                            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+                            background-color: #f4f9f9;
+                            color: #333;
+                            display: flex;
+                            justify-content: center;
+                            align-items: center;
+                            height: 100vh;
+                            margin: 0;
+                            padding: 20px;
+                        }
+                        .card {
+                            background: white;
+                            padding: 40px;
+                            border-radius: 20px;
+                            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+                            max-width: 500px;
+                            text-align: center;
+                            border-top: 5px solid #005067;
+                        }
+                        h1 {
+                            color: #005067;
+                            font-size: 24px;
+                            margin-bottom: 10px;
+                        }
+                        p {
+                            font-size: 16px;
+                            line-height: 1.6;
+                            color: #666;
+                            margin-bottom: 20px;
+                        }
+                        .icon {
+                            font-size: 50px;
+                            margin-bottom: 20px;
+                            color: #005067;
+                        }
+                        .footer {
+                            font-size: 12px;
+                            color: #999;
+                            margin-top: 30px;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="card">
+                        <div class="icon">✨</div>
+                        <h1>Que alegria ter você aqui, ${nome}!</h1>
+                        
+                        <p>Seu e-mail foi confirmado com sucesso e sua conta está ativada.</p>
+                        
+                        <p>Estamos muito felizes em fazer parte da sua jornada. Lembre-se: cada pequeno passo conta e nós estaremos torcendo por você em cada conquista.</p>
+                        
+                        <p>Agora, respire fundo e prepare-se para cuidar da pessoa mais importante da sua vida: você.</p>
+
+                        <p style="font-size: 14px; color: #888;">Pode fechar esta tela e voltar para o aplicativo.</p>
+
+                        <div class="footer">
+                            Com carinho,<br>
+                            Equipe Plus Health
+                        </div>
+                    </div>
+                </body>
+                </html>
             `);
         } else {
-            res.status(400).send('<h1 style="color: red;">Link inválido ou expirado.</h1>');
+            // Caso de erro (link expirado)
+            res.status(400).send(`
+                <!DOCTYPE html>
+                <html lang="pt-BR">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>Link Expirado</title>
+                    <style>
+                        body { font-family: sans-serif; background-color: #f4f9f9; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+                        .card { background: white; padding: 40px; border-radius: 20px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+                        h1 { color: #d9534f; }
+                    </style>
+                </head>
+                <body>
+                    <div class="card">
+                        <h1>Link inválido ou expirado.</h1>
+                        <p>Tente solicitar um novo link ou entre em contato com o suporte.</p>
+                    </div>
+                </body>
+                </html>
+            `);
         }
     } catch (err) {
         res.status(500).send('Erro interno no servidor.');
     }
 });
 
-// 8. Verificar status do usuário (para logout automático)
+// 8. Verificar status do usuário (Logout automático ao deletar)
 app.get('/usuarios/:id/status', async (req, res) => {
     const { id } = req.params;
     try {
@@ -360,10 +450,10 @@ app.get('/metas/:usuario_id', async (req, res) => {
 });
 
 // ----------------------------------------------------------------------
-// 🗑️ EXCLUSÃO DE CONTA (NOVAS ROTAS)
+// 🗑️ EXCLUSÃO DE CONTA (ROTAS FINAIS)
 // ----------------------------------------------------------------------
 
-// 8. Solicitar Exclusão de Conta (Envia Email)
+// 9. Solicitar Exclusão de Conta (Envia Email)
 app.post('/usuarios/:id/solicitar-exclusao', async (req, res) => {
     const { id } = req.params;
     const { email } = req.body; 
@@ -418,7 +508,7 @@ app.post('/usuarios/:id/solicitar-exclusao', async (req, res) => {
     }
 });
 
-// 9. Confirmar Exclusão (Link do Email - Rota Navegador)
+// 10. Confirmar Exclusão (Link do Email - Tela de Despedida)
 app.get('/confirmar-exclusao', async (req, res) => {
     const { token } = req.query;
     if (!token) return res.status(400).send('Token inválido.');
