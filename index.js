@@ -227,6 +227,21 @@ app.get('/verificar-email', async (req, res) => {
     }
 });
 
+// 8. Verificar status do usuário (para logout automático)
+app.get('/usuarios/:id/status', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await pool.query('SELECT id FROM usuarios WHERE id = $1', [id]);
+        if (result.rows.length > 0) {
+            res.json({ ativo: true });
+        } else {
+            res.status(404).json({ ativo: false });
+        }
+    } catch (err) {
+        res.status(500).json({ erro: err.message });
+    }
+});
+
 // --- Rotas Dashboard/App ---
 app.post('/alimentacao', async (req, res) => {
   const { usuario_id, descricao, data_agendada } = req.body;
@@ -356,7 +371,7 @@ app.post('/usuarios/:id/solicitar-exclusao', async (req, res) => {
     const token = crypto.randomBytes(20).toString('hex');
 
     try {
-        // Define o token de verificação no usuário para validar a exclusão depois
+        // Define o token de verificação
         const result = await pool.query(
             'UPDATE usuarios SET verification_token = $1 WHERE id = $2 RETURNING nome',
             [token, id]
@@ -368,7 +383,7 @@ app.post('/usuarios/:id/solicitar-exclusao', async (req, res) => {
 
         const nome = result.rows[0].nome;
 
-        // Configura o email de exclusão
+        // Email com mensagem de confirmação
         const mailOptions = {
             from: '"Plus Health" <PlusHealthTcc@gmail.com>',
             replyTo: 'PlusHealthTcc@gmail.com',
@@ -378,14 +393,14 @@ app.post('/usuarios/:id/solicitar-exclusao', async (req, res) => {
                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #ccc; padding: 20px; border-radius: 10px;">
                      <h2 style="color: #d9534f;">Atenção, ${nome}!</h2>
                      <p>Recebemos uma solicitação para <strong>EXCLUIR PERMANENTEMENTE</strong> sua conta.</p>
-                     <p>Se foi você quem solicitou, clique no botão abaixo para confirmar a exclusão de todos os seus dados.</p>
+                     <p>Se foi você quem solicitou, clique no botão abaixo para confirmar.</p>
                      <br>
                      <a href="${API_URL_DOMAIN}/confirmar-exclusao?token=${token}" 
                         style="background-color: #d9534f; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
                          Sim, Excluir Minha Conta
                      </a>
                      <br><br>
-                     <p style="color: #777; font-size: 12px;">Se não foi você, ignore este email e sua conta permanecerá segura.</p>
+                     <p style="color: #777; font-size: 12px;">Se não foi você, ignore este email.</p>
                    </div>
                   `
         };
@@ -409,30 +424,92 @@ app.get('/confirmar-exclusao', async (req, res) => {
     if (!token) return res.status(400).send('Token inválido.');
 
     try {
-        // Busca o usuário pelo token
-        const userCheck = await pool.query('SELECT id FROM usuarios WHERE verification_token = $1', [token]);
+        const userCheck = await pool.query('SELECT id, nome FROM usuarios WHERE verification_token = $1', [token]);
         
         if (userCheck.rowCount === 0) {
             return res.status(400).send('<h1 style="color: red;">Link inválido ou já utilizado.</h1>');
         }
 
         const usuarioId = userCheck.rows[0].id;
+        const nomeUsuario = userCheck.rows[0].nome;
 
-        // Deleta registros relacionados (tabelas filhas)
+        // Deleta tudo
         await pool.query('DELETE FROM alimentacao WHERE usuario_id = $1', [usuarioId]);
         await pool.query('DELETE FROM exercicios WHERE usuario_id = $1', [usuarioId]);
         await pool.query('DELETE FROM metas WHERE usuario_id = $1', [usuarioId]);
         await pool.query('DELETE FROM pesagem WHERE usuario_id = $1', [usuarioId]);
-
-        // Deleta o usuário
         await pool.query('DELETE FROM usuarios WHERE id = $1', [usuarioId]);
 
+        // Página de Despedida Emocional
         res.send(`
-            <div style="text-align: center; font-family: Arial; margin-top: 50px;">
-                <h1 style="color: #d9534f;">🗑️ Conta Excluída</h1>
-                <p>Sua conta e todos os seus dados foram apagados com sucesso.</p>
-                <p>Sentiremos sua falta!</p>
-            </div>
+            <!DOCTYPE html>
+            <html lang="pt-BR">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Conta Encerrada</title>
+                <style>
+                    body {
+                        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+                        background-color: #f4f9f9;
+                        color: #333;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        height: 100vh;
+                        margin: 0;
+                        padding: 20px;
+                    }
+                    .card {
+                        background: white;
+                        padding: 40px;
+                        border-radius: 20px;
+                        box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+                        max-width: 500px;
+                        text-align: center;
+                        border-top: 5px solid #005067;
+                    }
+                    h1 {
+                        color: #005067;
+                        font-size: 24px;
+                        margin-bottom: 10px;
+                    }
+                    p {
+                        font-size: 16px;
+                        line-height: 1.6;
+                        color: #666;
+                        margin-bottom: 20px;
+                    }
+                    .icon {
+                        font-size: 50px;
+                        margin-bottom: 20px;
+                        color: #005067;
+                    }
+                    .footer {
+                        font-size: 12px;
+                        color: #999;
+                        margin-top: 30px;
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="card">
+                    <div class="icon">🍃</div>
+                    <h1>Foi uma honra, ${nomeUsuario}.</h1>
+                    
+                    <p>Sua conta foi excluída com sucesso e todos os seus dados foram apagados.</p>
+                    
+                    <p>Queremos que saiba que foi um privilégio fazer parte da sua jornada de saúde, mesmo que por pouco tempo. Cuidar de si mesmo é o maior ato de amor que existe.</p>
+                    
+                    <p>Continue se priorizando. Se um dia decidir voltar, nossas portas estarão sempre abertas para você.</p>
+
+                    <div class="footer">
+                        Com carinho,<br>
+                        Equipe Plus Health
+                    </div>
+                </div>
+            </body>
+            </html>
         `);
 
     } catch (err) {
