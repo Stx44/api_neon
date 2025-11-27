@@ -201,7 +201,6 @@ app.put('/redefinir-senha/:id', async (req, res) => {
 });
 
 // 7. Rota do Link de Verificação (Navegador - Ativação de Conta)
-// --- TELA ESTILIZADA COM CARINHO ---
 app.get('/verificar-email', async (req, res) => {
     const { token } = req.query;
     if (!token) return res.status(400).send('Token inválido.');
@@ -332,15 +331,66 @@ app.get('/usuarios/:id/status', async (req, res) => {
     }
 });
 
-// --- Rotas Dashboard/App ---
+// ----------------------------------------------------------------------
+// 📊 DASHBOARD, ALIMENTAÇÃO, EXERCÍCIOS E PONTOS
+// ----------------------------------------------------------------------
+
+// ===> NOVA QUERY DE PONTOS (CORRIGIDA) <===
+// Usa subqueries para evitar multiplicação de registros (Cartesian Product)
+const QUERY_PONTOS = `
+  SELECT 
+    u.id, 
+    u.nome,
+    COALESCE(e.pts, 0) + COALESCE(p.pts, 0) + COALESCE(a.pts, 0) as pontos
+  FROM usuarios u
+  LEFT JOIN (
+    SELECT usuario_id, SUM(10) as pts 
+    FROM exercicios WHERE concluido = TRUE GROUP BY usuario_id
+  ) e ON u.id = e.usuario_id
+  LEFT JOIN (
+    SELECT usuario_id, SUM(5) as pts 
+    FROM pesagem GROUP BY usuario_id
+  ) p ON u.id = p.usuario_id
+  LEFT JOIN (
+    SELECT usuario_id, SUM(5) as pts 
+    FROM alimentacao GROUP BY usuario_id
+  ) a ON u.id = a.usuario_id
+`;
+
+// ===> NOVA ROTA: Get Points (Para o Botão Ranking) <===
+app.get('/get-points/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query(`${QUERY_PONTOS} WHERE u.id = $1;`, [id]);
+    const points = result.rows.length > 0 ? Number(result.rows[0].pontos) : 0;
+    res.json({ points });
+  } catch (err) { 
+    res.status(500).json({ erro: err.message }); 
+  }
+});
+
+// ===> ROTA ATUALIZADA: Ranking Global (Usando a Query segura) <===
+app.get('/dashboard/ranking', async (req, res) => {
+  try {
+    const result = await pool.query(`${QUERY_PONTOS} ORDER BY pontos DESC LIMIT 50;`);
+    res.json(result.rows);
+  } catch (err) { res.status(500).json({ erro: err.message }); }
+});
+
+// ===> ROTA ATUALIZADA: Alimentação (Marca como concluído para dar pontos) <===
 app.post('/alimentacao', async (req, res) => {
   const { usuario_id, descricao, data_agendada } = req.body;
   try {
-    const result = await pool.query('INSERT INTO alimentacao (usuario_id, descricao, data_agendada) VALUES ($1, $2, $3) RETURNING *', [usuario_id, descricao, data_agendada]);
+    // Adicionado "concluido = TRUE" para contabilizar pontos
+    const result = await pool.query(
+        'INSERT INTO alimentacao (usuario_id, descricao, data_agendada, concluido) VALUES ($1, $2, $3, TRUE) RETURNING *', 
+        [usuario_id, descricao, data_agendada]
+    );
     res.json(result.rows[0]);
   } catch (err) { res.status(500).json({ erro: err.message }); }
 });
 
+// Demais Rotas de Alimentação (Mantidas do seu código original)
 app.get('/alimentacao/:usuario_id', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM alimentacao WHERE usuario_id = $1', [req.params.usuario_id]);
@@ -355,6 +405,7 @@ app.put('/alimentacao/:id', async (req, res) => {
   } catch (err) { res.status(500).json({ erro: err.message }); }
 });
 
+// Rotas de Exercícios (Mantidas do seu código original)
 app.post('/exercicios', async (req, res) => {
   const { usuario_id, descricao, data_agendada } = req.body;
   try {
@@ -407,22 +458,7 @@ app.get('/dashboard/metas/:usuario_id', async (req, res) => {
   } catch (err) { res.status(500).json({ erro: err.message }); }
 });
 
-app.get('/dashboard/ranking', async (req, res) => {
-  try {
-    const result = await pool.query(`
-      SELECT u.nome,
-        SUM(CASE WHEN e.concluido = TRUE THEN 10 ELSE 0 END) AS pontos_exercicios,
-        SUM(CASE WHEN p.id IS NOT NULL THEN 5 ELSE 0 END) AS pontos_pesagem,
-        (SUM(CASE WHEN e.concluido = TRUE THEN 10 ELSE 0 END) + SUM(CASE WHEN p.id IS NOT NULL THEN 5 ELSE 0 END)) AS pontos
-      FROM usuarios u
-      LEFT JOIN exercicios e ON u.id = e.usuario_id
-      LEFT JOIN pesagem p ON u.id = p.usuario_id
-      GROUP BY u.id ORDER BY pontos DESC LIMIT 10;
-    `);
-    res.json(result.rows);
-  } catch (err) { res.status(500).json({ erro: err.message }); }
-});
-
+// Rotas de Metas (Mantidas do seu código original)
 app.post('/metas', async (req, res) => {
   const { usuario_id, descricao, data_agendada } = req.body;
   try {
@@ -461,7 +497,6 @@ app.post('/usuarios/:id/solicitar-exclusao', async (req, res) => {
     const token = crypto.randomBytes(20).toString('hex');
 
     try {
-        // Define o token de verificação
         const result = await pool.query(
             'UPDATE usuarios SET verification_token = $1 WHERE id = $2 RETURNING nome',
             [token, id]
@@ -473,7 +508,6 @@ app.post('/usuarios/:id/solicitar-exclusao', async (req, res) => {
 
         const nome = result.rows[0].nome;
 
-        // Email com mensagem de confirmação
         const mailOptions = {
             from: '"Plus Health" <PlusHealthTcc@gmail.com>',
             replyTo: 'PlusHealthTcc@gmail.com',
@@ -523,7 +557,6 @@ app.get('/confirmar-exclusao', async (req, res) => {
         const usuarioId = userCheck.rows[0].id;
         const nomeUsuario = userCheck.rows[0].nome;
 
-        // Deleta tudo
         await pool.query('DELETE FROM alimentacao WHERE usuario_id = $1', [usuarioId]);
         await pool.query('DELETE FROM exercicios WHERE usuario_id = $1', [usuarioId]);
         await pool.query('DELETE FROM metas WHERE usuario_id = $1', [usuarioId]);
@@ -589,9 +622,11 @@ app.get('/confirmar-exclusao', async (req, res) => {
                     
                     <p>Sua conta foi excluída com sucesso e todos os seus dados foram apagados.</p>
                     
-                    <p>Queremos que saiba que foi um privilégio fazer parte da sua jornada de saúde, mesmo que por pouco tempo. Cuidar de si mesmo é o maior ato de amor que existe.</p>
+                    <p>Queremos que saiba que foi um privilégio fazer parte da sua jornada. Lembre-se: cada pequeno passo conta e nós estaremos torcendo por você em cada conquista.</p>
                     
-                    <p>Continue se priorizando. Se um dia decidir voltar, nossas portas estarão sempre abertas para você.</p>
+                    <p>Agora, respire fundo e prepare-se para cuidar da pessoa mais importante da sua vida: você.</p>
+
+                    <p style="font-size: 14px; color: #888;">Pode fechar esta tela e voltar para o aplicativo.</p>
 
                     <div class="footer">
                         Com carinho,<br>
