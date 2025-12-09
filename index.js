@@ -5,6 +5,7 @@ import pkg from 'pg';
 const { Pool } = pkg;
 import nodemailer from 'nodemailer'; 
 import crypto from 'crypto'; 
+import bcrypt from 'bcrypt'; // [Alteração] Importação do bcrypt
 
 const app = express();
 app.use(cors());
@@ -40,15 +41,19 @@ const API_URL_DOMAIN = "https://api-neon-2kpd.onrender.com";
 // 🧑 GESTÃO DE USUÁRIOS
 // ----------------------------------------------------------------------
 
-// 1. Criar Conta (Cadastro)
+// 1. Criar Conta (Cadastro) - [Alterado para usar Hash]
 app.post('/usuarios', async (req, res) => {
     const { nome, email, senha } = req.body;
     const token = crypto.randomBytes(20).toString('hex');
 
     try {
+        // [Alteração] Criptografa a senha antes de salvar
+        const saltRounds = 10;
+        const hashSenha = await bcrypt.hash(senha, saltRounds);
+
         const result = await pool.query(
             'INSERT INTO usuarios (nome, email, senha, email_verificado, verification_token) VALUES ($1, $2, $3, FALSE, $4) RETURNING id, nome, email',
-            [nome, email, senha, token]
+            [nome, email, hashSenha, token] // Salva o hash, não a senha pura
         );
         
         const novoUsuario = result.rows[0];
@@ -92,18 +97,20 @@ app.post('/usuarios', async (req, res) => {
     }
 });
 
-// 2. Login
+// 2. Login - [Alterado para comparar Hash]
 app.post('/login', async (req, res) => {
     const { email, senha } = req.body;
     try {
+        // Busca o usuário pelo email
         const result = await pool.query(
-            'SELECT * FROM usuarios WHERE email = $1 AND senha = $2',
-            [email, senha]
+            'SELECT * FROM usuarios WHERE email = $1',
+            [email]
         );
         
         const usuario = result.rows[0];
 
-        if (!usuario) {
+        // [Alteração] Verifica se o usuário existe E se a senha bate com o hash
+        if (!usuario || !(await bcrypt.compare(senha, usuario.senha))) {
             return res.status(401).json({ sucesso: false, mensagem: 'Email ou senha incorretos.' });
         }
         
@@ -111,6 +118,9 @@ app.post('/login', async (req, res) => {
              return res.status(401).json({ sucesso: false, mensagem: 'Verifique seu email antes de entrar.' });
         }
         
+        // Remove a senha do objeto de retorno por segurança
+        delete usuario.senha;
+
         res.json({ sucesso: true, usuario: usuario });
         
     } catch (err) {
@@ -144,7 +154,7 @@ app.put('/usuarios/:id', async (req, res) => {
   }
 });
 
-// 4. Alterar Senha
+// 4. Alterar Senha - [Alterado para validar e criar Hash]
 app.put('/usuarios/:id/senha', async (req, res) => {
   const { id } = req.params;
   const { senha_atual, nova_senha } = req.body;
@@ -156,9 +166,15 @@ app.put('/usuarios/:id/senha', async (req, res) => {
     const usuario = userResult.rows[0];
 
     if (!usuario) return res.status(404).json({ erro: "Usuário não encontrado." });
-    if (usuario.senha !== senha_atual) return res.status(401).json({ erro: "Senha atual incorreta." });
 
-    await pool.query('UPDATE usuarios SET senha = $1 WHERE id = $2', [nova_senha, id]);
+    // [Alteração] Verifica a senha atual comparando hash
+    const senhaCorreta = await bcrypt.compare(senha_atual, usuario.senha);
+    if (!senhaCorreta) return res.status(401).json({ erro: "Senha atual incorreta." });
+
+    // [Alteração] Cria hash da nova senha
+    const novoHash = await bcrypt.hash(nova_senha, 10);
+
+    await pool.query('UPDATE usuarios SET senha = $1 WHERE id = $2', [novoHash, id]);
     res.json({ sucesso: true, mensagem: "Senha alterada!" });
 
   } catch (err) {
@@ -181,7 +197,7 @@ app.post('/verificar-email', async (req, res) => {
   }
 });
 
-// 6. Redefinir Senha
+// 6. Redefinir Senha - [Alterado para criar Hash]
 app.put('/redefinir-senha/:id', async (req, res) => {
   const { id } = req.params;
   const { nova_senha } = req.body;
@@ -189,7 +205,10 @@ app.put('/redefinir-senha/:id', async (req, res) => {
   if (!nova_senha) return res.status(400).json({ erro: "Nova senha obrigatória." });
 
   try {
-    const result = await pool.query('UPDATE usuarios SET senha = $1 WHERE id = $2 RETURNING id', [nova_senha, id]);
+    // [Alteração] Cria hash da nova senha antes de salvar
+    const novoHash = await bcrypt.hash(nova_senha, 10);
+
+    const result = await pool.query('UPDATE usuarios SET senha = $1 WHERE id = $2 RETURNING id', [novoHash, id]);
     if (result.rowCount > 0) {
       res.json({ sucesso: true, mensagem: "Senha redefinida!" });
     } else {
